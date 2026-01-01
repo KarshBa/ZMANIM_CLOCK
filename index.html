@@ -203,7 +203,7 @@
 	z-index: 1;
 	}
 
-	#am1:checked ~ .segThumb{
+	.seg #am1:checked ~ .segThumb{
 	transform: translateX(100%);
 	}
 
@@ -296,12 +296,110 @@
 	opacity: .92;
 	}
 	input[type="range"]{ width:100%; }
+	/* ---------- Mobile: clock-only + patties menu ---------- */
+.pattiesBtn{
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:38px;
+  height:38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color: #eaf0ff;
+  display:none;            /* shown on mobile via media query */
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  backdrop-filter: blur(10px);
+}
+.pattiesBtn:active{ transform: scale(.98); }
+.pattiesBtn svg{ width:20px; height:20px; }
+
+.clockCard{ position:relative; } /* enable top-right button positioning */
+
+/* Drawer overlay (mobile menu) */
+.drawerOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(2px);
+  opacity:0;
+  pointer-events:none;
+  transition: opacity .18s ease;
+  z-index: 50;
+}
+.drawer{
+  position:fixed;
+  top:0;
+  right:0;
+  height:100%;
+  width: min(420px, 92vw);
+  background: rgba(18,24,38,.92);
+  border-left: 1px solid rgba(255,255,255,.12);
+  transform: translateX(102%);
+  transition: transform .22s ease;
+  z-index: 51;
+  padding: 14px;
+  overflow:auto;
+  -webkit-overflow-scrolling: touch;
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+}
+.drawerHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:10px;
+}
+.drawerHeader .title{
+  font-weight:650;
+  opacity:.95;
+}
+.drawerClose{
+  width:36px;
+  height:36px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color:#eaf0ff;
+  cursor:pointer;
+}
+.drawerClose:active{ transform: scale(.98); }
+
+body.drawerOpen{ overflow:hidden; }
+body.drawerOpen .drawerOverlay{ opacity:1; pointer-events:auto; }
+body.drawerOpen .drawer{ transform: translateX(0); }
+
+/* Mobile layout rules */
+@media (max-width: 860px){
+  body{ padding: 10px; }
+  .top{ grid-template-columns: 1fr; }  /* already, but keep explicit */
+
+  /* Hide the right-side card entirely on mobile (we'll show it in drawer instead) */
+  .top > .panel.list{ display:none; }
+
+  /* Show patties button on mobile */
+  .pattiesBtn{ display:flex; }
+
+  /* Make the clock card tighter and SVG fill width nicely */
+  .clockCard{ padding: 10px; }
+  svg{ width: calc(100vw - 20px); max-width: 520px; } /* fills phone w/ margin */
+}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="top">
       <div class="panel clockCard">
+  <button class="pattiesBtn" id="btnDrawer" aria-label="Open zmanim menu" title="Zmanim & Controls">
+    <!-- simple 3-line icon -->
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+  
         <h1>Halachic Clock (Sha’ot Zmaniot)</h1>
 
         <!-- Clock SVG -->
@@ -385,10 +483,10 @@
 				<label>Clock anchor</label>
 
 				<div class="seg" role="tablist" aria-label="Clock anchor">
-				<input type="radio" name="anchorMode" id="am0" value="0" checked>
+				<input type="radio" name="anchorMode" id="am0" value="0">
 				<label for="am0" role="tab">Netz on top</label>
 
-				<input type="radio" name="anchorMode" id="am1" value="1">
+				<input type="radio" name="anchorMode" id="am1" value="1" checked>
 				<label for="am1" role="tab">Chatzot on top</label>
 
 				<span class="segThumb" aria-hidden="true"></span>
@@ -414,6 +512,19 @@
       </div>
     </div>
   </div>
+  
+  <!-- Mobile drawer (Zmanim + Controls) -->
+<div class="drawerOverlay" id="drawerOverlay" aria-hidden="true"></div>
+
+<aside class="drawer" id="drawer" aria-label="Zmanim and controls">
+  <div class="drawerHeader">
+    <div class="title">Zmanim</div>
+    <button class="drawerClose" id="btnDrawerClose" aria-label="Close menu">✕</button>
+  </div>
+
+  <!-- We will MOVE your existing .panel.list contents into here on mobile via JS -->
+  <div id="drawerContent"></div>
+</aside>
 
   <script>
     /**********************************************************************
@@ -447,10 +558,72 @@
     // ---------- Helpers ----------
     const $ = (id)=>document.getElementById(id);
 	const DEBUG_ARCS = false;
-	const DEBUG_TP_VISUAL = true;
+	const DEBUG_TP_VISUAL = false;
 	let __refreshN = 0;
 	let __lastGoodDateStr = "";
 	let __lastGoodState = null;
+	
+	// ---------- Persistent hand + animation globals ----------
+let __handRAF = 0;
+let __handState = null;          // latest state to drive hand
+let __handShouldAnimate = false; // gate RAF loop
+
+function stopHandAnimation(){
+  if (__handRAF){
+    cancelAnimationFrame(__handRAF);
+    __handRAF = 0;
+  }
+}
+
+function ensureHandElements(){
+  const handG = $("hand");
+  if (!handG) return;
+
+  // If already created, do nothing
+  if (handG.querySelector("#handShadowLine")) return;
+
+  // Clear once (in case old versions left stuff)
+  handG.innerHTML = "";
+
+  const cx = 210, cy = 210;
+
+  const shadow = document.createElementNS("http://www.w3.org/2000/svg","line");
+  shadow.id = "handShadowLine";
+  shadow.setAttribute("x1", cx); shadow.setAttribute("y1", cy);
+  shadow.setAttribute("x2", cx); shadow.setAttribute("y2", cy);
+  shadow.setAttribute("class","handShadow");
+  handG.appendChild(shadow);
+
+  const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+  line.id = "handLine";
+  line.setAttribute("x1", cx); line.setAttribute("y1", cy);
+  line.setAttribute("x2", cx); line.setAttribute("y2", cy);
+  line.setAttribute("class","hand");
+  handG.appendChild(line);
+
+  const cap = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  cap.id = "handCap";
+  cap.setAttribute("cx", cx); cap.setAttribute("cy", cy); cap.setAttribute("r","5.2");
+  cap.setAttribute("class","handCap");
+  handG.appendChild(cap);
+
+  // tiny info ring (static, matches your old render)
+  const rInner = 52;
+  const ring = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  ring.id = "handRing";
+  ring.setAttribute("cx", cx); ring.setAttribute("cy", cy); ring.setAttribute("r", rInner+6);
+  ring.setAttribute("fill","none");
+  ring.setAttribute("stroke","rgba(255,255,255,.10)");
+  handG.appendChild(ring);
+}
+
+function setHandEndpoint(x2, y2){
+  const sh = document.getElementById("handShadowLine");
+  const ln = document.getElementById("handLine");
+  if (!sh || !ln) return;
+  sh.setAttribute("x2", x2); sh.setAttribute("y2", y2);
+  ln.setAttribute("x2", x2); ln.setAttribute("y2", y2);
+}
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
@@ -690,7 +863,105 @@
 		return { period:"night", idx: 0 };
 	}
 
+	// ---------- Arc params + hand angle (reusable) ----------
+function computeArcParams(state){
+  // mirrors your renderClock proportional-arc logic
+  let dayLen = state.dayLength;
+  let nightLen = state.nightLength;
 
+  if (!Number.isFinite(dayLen) || !Number.isFinite(nightLen) || dayLen <= 0 || nightLen <= 0) {
+    dayLen = 12 * 3600000;
+    nightLen = 12 * 3600000;
+  }
+
+  const totalLen = dayLen + nightLen;
+  let dayFrac = (totalLen > 0) ? (dayLen / totalLen) : 0.5;
+  dayFrac = clamp(dayFrac, 0.02, 0.98);
+
+  const dayArc = 360 * dayFrac;
+  const nightArc = 360 - dayArc;
+
+  const stepDay = dayArc / 12;
+  const stepNight = nightArc / 12;
+
+  const topDeg = 270;
+
+  let dayStart, dayEnd, nightStart;
+
+  if ((state.anchorMode ?? 0) === 0) {
+    // Netz on top
+    dayStart = topDeg;
+    dayEnd   = dayStart + dayArc;
+    nightStart = dayEnd;
+  } else {
+    // Chatzot on top
+    dayStart = topDeg - dayArc/2;
+    dayEnd   = dayStart + dayArc;
+    nightStart = dayEnd;
+  }
+
+  return { dayArc, nightArc, stepDay, stepNight, dayStart, dayEnd, nightStart, topDeg };
+}
+
+function angleForTimeProportional(state, arcs, t){
+  const { dayStart, dayArc, nightStart, nightArc } = arcs;
+
+  // HALF-OPEN intervals like your current logic
+  if (t >= state.sunrise && t < state.sunset){
+    const f = clamp((t - state.sunrise) / state.dayLength, 0, 1);
+    return dayStart + dayArc * f;
+  }
+  if (t >= state.sunset && t < state.nextSunrise){
+    const f = clamp((t - state.sunset) / state.nightLength, 0, 1);
+    return nightStart + nightArc * f;
+  }
+  if (t < state.sunrise){
+    const prevNightLen = (state.sunrise - state.prevSunset);
+    const f = clamp((t - state.prevSunset) / prevNightLen, 0, 1);
+    const nightPrevStart = dayStart - nightArc;
+    return nightPrevStart + nightArc * f;
+  }
+  return dayStart;
+}
+
+function computeHandAngleAndRadius(state, t){
+  const arcs = computeArcParams(state);
+  const a = angleForTimeProportional(state, arcs, t);
+
+  // Radius depends on whether we're in day / night (kept compatible with future non-equal radii)
+  const rOuter = 190;
+  const rDayOuter = rOuter;
+  const rNightOuter = rOuter;
+
+  let isDay = (t >= state.sunrise && t < state.sunset);
+  let isPrevNight = (!isDay && t < state.sunrise);
+  const outer = isDay ? rDayOuter : rNightOuter;
+
+  const rHand = outer - 18;
+  return { angleDeg: a, rHand };
+}
+
+function isSelectedDateToday(){
+  const v = $("date").value;
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+  return (!v || v === todayStr);
+}
+
+function representativeTimeForSelectedDate(state){
+  // Freeze at civil noon of selected date (local)
+  const d = state.civilDate || new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+}
+
+function updateHandOnly(state, t){
+  ensureHandElements();
+  const cx = 210, cy = 210;
+
+  const { angleDeg, rHand } = computeHandAngleAndRadius(state, t);
+  const end = polar(cx, cy, rHand, angleDeg);
+  setHandEndpoint(end.x, end.y);
+}
 
     // ---------- Render Clock ----------
     function renderClock(state){
@@ -698,7 +969,8 @@
       const handG = $("hand");
       const moonG = $("moon");
       slicesG.innerHTML = "";
-      handG.innerHTML = "";
+      // Don't clear hand anymore; it's persistent + animated
+	  ensureHandElements();
 
       const cx=210, cy=210;
       const rInner = 52;
@@ -1312,63 +1584,13 @@ const cs = (() => {
       // Render moon
       renderMoon(moonG, state.moonFrac);
 
-      // Render minimalist hour hand (points to current halachic slice center)
-      const now = state.now;
-      let handPeriod, handIdx;
-      if (isBetween(now, state.sunrise, state.sunset)){
-        handPeriod = "day";
-        handIdx = clamp(Math.floor((now - state.sunrise)/state.shaahDay), 0, 11);
-      }else{
-        handPeriod = "night";
-        // night starts at sunset (halachic day boundary)
-        handIdx = clamp(Math.floor((now - state.sunset)/state.shaahNight), 0, 11);
-        if (now < state.sunset) {
-          // after midnight but before sunrise (still part of night): compute from sunset on previous civil day
-          // We already built state.sunset for current civil date, so if now < sunset we should still be
-          // in "night" that began at yesterday's sunset. For simplicity, we instead use state.prevSunset.
-          handIdx = clamp(Math.floor((now - state.prevSunset)/state.shaahNightPrev), 0, 11);
-        }
-      }
-
-      const isHandPrevNight = (handPeriod === "night" && now < state.sunrise);
-	  const handNightBase = isHandPrevNight ? (dayStart - nightArc) : nightStart;
-
-	  const aCenter = (handPeriod==="day")
-	  ? (dayStart + (handIdx+0.5)*stepDay)
-	  : (handNightBase + (handIdx+0.5)*stepNight);
-
-
-
-      const outer = (handPeriod==="day") ? rDayOuter : rNightOuter;
-      const rHand = outer - 18;
-
-      const end = polar(cx,cy,rHand,aCenter);
-
-      // subtle shadow under hand
-      const shadow = document.createElementNS("http://www.w3.org/2000/svg","line");
-      shadow.setAttribute("x1", cx); shadow.setAttribute("y1", cy);
-      shadow.setAttribute("x2", end.x); shadow.setAttribute("y2", end.y);
-      shadow.setAttribute("class","handShadow");
-      handG.appendChild(shadow);
-
-      const line = document.createElementNS("http://www.w3.org/2000/svg","line");
-      line.setAttribute("x1", cx); line.setAttribute("y1", cy);
-      line.setAttribute("x2", end.x); line.setAttribute("y2", end.y);
-      line.setAttribute("class","hand");
-      handG.appendChild(line);
-
-      const cap = document.createElementNS("http://www.w3.org/2000/svg","circle");
-      cap.setAttribute("cx",cx); cap.setAttribute("cy",cy); cap.setAttribute("r","5.2");
-      cap.setAttribute("class","handCap");
-      handG.appendChild(cap);
-
-      // tiny info ring
-      const ring = document.createElementNS("http://www.w3.org/2000/svg","circle");
-      ring.setAttribute("cx",cx); ring.setAttribute("cy",cy); ring.setAttribute("r", rInner+6);
-      ring.setAttribute("fill","none");
-      ring.setAttribute("stroke","rgba(255,255,255,.10)");
-      handG.appendChild(ring);
-    }
+      // Set hand once for this render (animation loop may take over)
+	  const t0 = isSelectedDateToday() ? new Date() : representativeTimeForSelectedDate(state);
+	  updateHandOnly(state, t0);
+		
+	  // (HAND IS NOW PERSISTENT + UPDATED BY updateHandOnly()/RAF)
+	  // Do not append new hand elements here.
+}
 
     // ---------- Build zmanim ----------
     function buildState(lat, lon, dateLocal, tzeitMinutes){
@@ -1464,6 +1686,7 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
         shaahDay, shaahNight, shaahNightPrev,
         tzeitMinutes,
         now,
+		tzOffsetMin: new Date().getTimezoneOffset(),
         labels,
         // moon phase computed for "now" (or could be for halachic date; UI wants current)
         civilDate: dateLocal,                 // <-- add this so renderList can use it
@@ -1501,6 +1724,68 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
 	  $("hebrewDate").textContent = hebrewDate;
 	  $("hebrewDow").textContent = hebrewDow;
     }
+	
+	function startHandAnimation(state){
+  __handState = state;
+
+  stopHandAnimation(); // hard-cancel any previous RAF loop
+
+  // Non-today: freeze at civil noon (consistent + stated behavior)
+  if (!isSelectedDateToday()){
+    __handShouldAnimate = false;
+    updateHandOnly(state, representativeTimeForSelectedDate(state));
+    return;
+  }
+
+  __handShouldAnimate = true;
+
+  // One-time: ensure hand exists and set initial position immediately
+  updateHandOnly(__handState, new Date());
+
+  // Visibility pause/resume (extra credit)
+  const shouldRunNow = () => !document.hidden && __handShouldAnimate && __handState;
+
+  function tick(){
+    if (!shouldRunNow()){
+      __handRAF = 0;
+      return;
+    }
+
+    const now = new Date();
+    updateHandOnly(__handState, now);
+
+    const s = __handState;
+
+    // 1) Civil date rollover: keep widget “forever” live when user is on "today"
+    // If date picker no longer matches today's YYYY-MM-DD, advance it and refresh once.
+    const todayStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+    const v = $("date").value;
+    if (!v || v !== todayStr){
+      $("date").value = todayStr;
+      refresh(); // single full rebuild for the new day
+      return;
+    }
+
+    // 2) DST / tz boundary condition: refresh once if timezone offset changed
+    if (Number.isFinite(s.tzOffsetMin) && now.getTimezoneOffset() !== s.tzOffsetMin){
+      refresh();
+      return;
+    }
+
+    // 3) Solar boundary condition: refresh once when we’ve crossed into the next cycle
+    // (Next sunrise is the point where the “next day’s” arcs/labels become correct.)
+    if (s.nextSunrise instanceof Date && Number.isFinite(s.nextSunrise.getTime())){
+      if (now >= s.nextSunrise){
+        refresh();
+        return;
+      }
+    }
+
+    __handRAF = requestAnimationFrame(tick);
+  }
+
+  __handRAF = requestAnimationFrame(tick);
+}
 
     // ---------- Main ----------
     function refresh(){
@@ -1535,7 +1820,7 @@ if (dateStr) {
 
 	// build state, then attach anchorMode onto it
 	let state = buildState(lat, lon, dateLocal, tzeitMinutes);
-state.anchorMode = anchorMode;
+	state.anchorMode = anchorMode;
 
 // If solar calc failed (buildState returned NaN sunrise/sunset), keep last good state
 // so the clock doesn't blank out (no labels) during interval refreshes.
@@ -1576,6 +1861,7 @@ if (badSolar) {
 
 	renderList(state);
 	renderClock(state);
+	startHandAnimation(state);
 	}
 
 
@@ -1587,6 +1873,55 @@ if (badSolar) {
       const d = pad2(now.getDate());
       $("date").value = `${y}-${m}-${d}`;
     }
+	
+	// ---------- Mobile drawer wiring ----------
+function isMobile(){
+  return window.matchMedia("(max-width: 860px)").matches;
+}
+
+function openDrawer(){
+  document.body.classList.add("drawerOpen");
+}
+
+function closeDrawer(){
+  document.body.classList.remove("drawerOpen");
+}
+
+// Move the existing right-side panel (.panel.list) into the drawer on mobile,
+// and move it back out on desktop so your original layout stays intact.
+function syncDrawerContent(){
+  const listPanel = document.querySelector(".panel.list");
+  const drawerContent = document.getElementById("drawerContent");
+  const top = document.querySelector(".top");
+
+  if (!listPanel || !drawerContent || !top) return;
+
+  if (isMobile()){
+    // Put the list panel inside the drawer (it will be hidden in layout via CSS anyway)
+    if (listPanel.parentElement !== drawerContent){
+      drawerContent.appendChild(listPanel);
+    }
+  } else {
+    // Put it back as the 2nd column child of .top
+    if (listPanel.parentElement !== top){
+      top.appendChild(listPanel);
+    }
+    closeDrawer();
+  }
+}
+
+document.getElementById("btnDrawer")?.addEventListener("click", openDrawer);
+document.getElementById("btnDrawerClose")?.addEventListener("click", closeDrawer);
+document.getElementById("drawerOverlay")?.addEventListener("click", closeDrawer);
+
+// Close on ESC
+document.addEventListener("keydown", (e)=>{
+  if (e.key === "Escape") closeDrawer();
+});
+
+// Keep drawer content correct on load + resize/orientation change
+window.addEventListener("resize", syncDrawerContent);
+syncDrawerContent();
 
     $("btnRefresh").addEventListener("click", refresh);
 	document.querySelectorAll('input[name="anchorMode"]').forEach(r => r.addEventListener("change", refresh));
@@ -1608,16 +1943,33 @@ if (badSolar) {
         alert("Could not get location: " + err.message);
       }, { enableHighAccuracy:true, timeout:8000 });
     });
+	
+	// Pause/resume smooth hand when tab visibility changes
+	document.addEventListener("visibilitychange", () => {
+	// If user is viewing "today", resume smooth motion when tab becomes visible again.
+	if (!document.hidden && __handState && isSelectedDateToday()){
+		startHandAnimation(__handState);
+		} else if (document.hidden){
+		stopHandAnimation();
+	}
+});
 
     // Re-render every minute (no background promises; just a simple interval while open)
     setToday();
     refresh();
     setInterval(()=>{
-  const v = $("date").value;
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
-  if (!v || v === todayStr) refresh();
-}, 60*1000);
+	// Only used as a fallback for rare edge cases if RAF is paused/throttled.
+	// We keep it very conservative: only refresh if "today" rolled over.
+	const now = new Date();
+	const todayStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+	const v = $("date").value;
+	if (v && v !== todayStr && isSelectedDateToday()){
+	// (Normally handled in RAF tick; this is just a safety net.)
+		$("date").value = todayStr;
+		refresh();
+	}
+}, 10 * 60); // every 10 minutes, not 60s
+
   </script>
 </body>
 </html>
