@@ -15,7 +15,7 @@
       --line2:rgba(248,251,255,.22);
       --bg:#0e1320;
       --card:rgba(255,255,255,.06);
-	     --chatzot:#f3d36b;
+	  --chatzot:#f3d36b;
       
       /* calm geometry */
       --radius:190;
@@ -272,26 +272,26 @@
 
     /* minimalist hour hand */
     .hand{
-      stroke: rgba(255,255,255,.92);
-      stroke-width: 2.2;
+      stroke: #D35537;
+      stroke-width: 3.2;
       stroke-linecap: round;
     }
     .handCap{
       fill: rgba(255,255,255,.92);
     }
     .handShadow{
-      stroke: rgba(0,0,0,.35);
+      stroke: #D35537;
       stroke-width: 4.6;
       stroke-linecap: round;
     }
 	.chatzotLineShadow{
-	stroke: rgba(0,0,0,.35);
-	stroke-width: 6.2;
+	stroke: rgba(255,255,255,.92);
+	stroke-width: 2.2;
 	stroke-linecap: round;
 	}
 	.chatzotLine{
-	stroke: var(--chatzot);
-	stroke-width: 3.2;
+	stroke: rgba(255,255,255,.92);
+	stroke-width: 2.2;
 	stroke-linecap: round;
 	opacity: .92;
 	}
@@ -394,7 +394,7 @@
 				<span class="segThumb" aria-hidden="true"></span>
 				</div>
 
-				<div class="small" id="anchorLabel" style="margin-top:6px; opacity:.9;">Top = Netz (Sunrise)</div>
+				<div class="small" id="anchorLabel" style="margin-top:6px; opacity:.9;">Top = Netz HaChamah</div>
 			  </div>
 
 
@@ -1452,7 +1452,7 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
         { name:"Plag", short:"Plag", time: plag },
         { name:"Shkiah", short:"Shkiah", time: shkia },
         { name:"Tzeit", short:"Tzeit", time: tzeit },
-        { name:"Chatzot Layla", short:"Chatzot·L", time: chatzotLayla },
+        { name:"Chatzot Laila", short:"Chatzot·L", time: chatzotLayla },
       ];
 
       return {
@@ -1472,16 +1472,16 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
         // full list for below-the-clock
         zmanimList: [
           ["Alot (72m)", alot],
-          ["Netz (Sunrise)", netz],
+          ["Netz HaChamah", netz],
           ["Sof Zman Shema (3 shaot)", shema],
-          ["Sof Zman Tfila (4 shaot)", tfila],
-          ["Chatzot (midday)", chatzot],
+          ["Sof Zman Tefila (4 shaot)", tfila],
+          ["Chatzot HaYom", chatzot],
           ["Mincha Gedola (6.5)", minchaGedola],
           ["Mincha Ketana (9.5)", minchaKetana],
           ["Plag (10.75)", plag],
           ["Shkiah (Sunset)", shkia],
           [`Tzeit (+${tzeitMinutes}m)`, tzeit],
-          ["Chatzot Layla", chatzotLayla],
+          ["Chatzot Laila", chatzotLayla],
         ]
       };
     }
@@ -1561,7 +1561,7 @@ if (badSolar) {
 	// update the UI label text (PUTS YOUR SNIPPET IN THE RIGHT PLACE)
 	$("anchorLabel").textContent =
     (anchorMode === 0)
-      ? "Top = Netz (Sunrise)"
+      ? "Top = Netz HaChamah"
       : "Top = Chatzot Hayom (Midday)";
 
 	// Status line
