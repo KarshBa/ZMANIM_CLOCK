@@ -1,0 +1,1623 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Halachic Clock (Zman Clock) — Single File</title>
+  <style>
+    :root{
+      /* two-tone palette only */
+      --day:#f4f2ea;      /* light */
+      --night:#1a2233;    /* dark */
+      --ink:#0c1220;      /* text on light */
+      --chalk:#f8fbff;    /* text on dark */
+      --line:rgba(12,18,32,.28);
+      --line2:rgba(248,251,255,.22);
+      --bg:#0e1320;
+      --card:rgba(255,255,255,.06);
+	  --chatzot:#f3d36b;
+
+      /* calm geometry */
+      --radius:190;
+      --inner:52;
+
+      /* Arabesque-ish subtle motif */
+      --motif:rgba(248,251,255,.06);
+      --motif2:rgba(12,18,32,.06);
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 700px at 50% 20%, rgba(255,255,255,.05), transparent 55%),
+                  radial-gradient(900px 600px at 50% 110%, rgba(255,255,255,.03), transparent 55%),
+                  var(--bg);
+      color: #eaf0ff;
+      display:flex;
+      justify-content:center;
+      padding:18px;
+    }
+
+    .wrap{
+      width:min(960px, 100%);
+      display:grid;
+      gap:14px;
+    }
+
+    .top{
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:14px;
+      align-items:stretch;
+    }
+
+    @media (max-width: 860px){
+      .top{ grid-template-columns:1fr; }
+    }
+
+    .panel{
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      padding:14px;
+      backdrop-filter: blur(10px);
+    }
+
+    .panel h1{
+      margin:0 0 8px 0;
+      font-size: 1.05rem;
+      letter-spacing:.2px;
+      font-weight:650;
+      opacity:.95;
+    }
+
+    .clockCard{
+      padding:14px;
+      display:grid;
+      place-items:center;
+    }
+
+    .meta{
+      text-align:center;
+      margin-top:10px;
+      line-height:1.25;
+    }
+    .meta .hebrewDate{
+      font-size: 1.1rem;
+      font-weight: 650;
+      letter-spacing:.2px;
+    }
+    .meta .dow{
+      font-size:.95rem;
+      opacity:.9;
+      margin-top:3px;
+    }
+
+    .list h2{
+      margin:0 0 10px 0;
+      font-size:1rem;
+      font-weight:650;
+      opacity:.95;
+    }
+
+    .zlist{
+      display:grid;
+      gap:8px;
+    }
+    .row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.12);
+    }
+    .row .k{
+      font-weight:650;
+      opacity:.95;
+      white-space:nowrap;
+    }
+    .row .v{
+      font-variant-numeric: tabular-nums;
+      opacity:.95;
+      white-space:nowrap;
+    }
+
+    /* collapsible controls */
+    details.controls{
+      border-radius:18px;
+      overflow:hidden;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+    }
+    details.controls summary{
+      cursor:pointer;
+      list-style:none;
+      padding:12px 14px;
+      font-weight:650;
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    details.controls summary::-webkit-details-marker{ display:none; }
+    details.controls summary .hint{
+      font-size:.9rem;
+      opacity:.75;
+      font-weight:550;
+    }
+    .controlsBody{
+      padding:12px 14px 14px 14px;
+      display:grid;
+      gap:12px;
+      border-top: 1px solid rgba(255,255,255,.10);
+    }
+	/* Apple-ish segmented control */
+	.anchorControl { grid-column: 1 / -1; } /* makes it span full width in the grid */
+
+	.seg{
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0;
+	padding: 3px;
+	border-radius: 999px;
+	background: rgba(255,255,255,.10);
+	border: 1px solid rgba(255,255,255,.14);
+	box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+	user-select:none;
+	}
+
+	.seg input{
+	position:absolute;
+	opacity:0;
+	pointer-events:none;
+	}
+
+	.seg label{
+	margin:0;
+	padding: 10px 10px;
+	text-align:center;
+	font-size: .92rem;
+	font-weight: 650;
+	opacity: .85;
+	cursor: pointer;
+	z-index: 2;
+	border-radius: 999px;
+	}
+
+	.seg .segThumb{
+	position:absolute;
+	top:3px; bottom:3px;
+	left:3px;
+	width: calc(50% - 3px);
+	border-radius: 999px;
+	background: rgba(255,255,255,.22);
+	box-shadow:
+    0 10px 22px rgba(0,0,0,.25),
+    inset 0 1px 0 rgba(255,255,255,.10);
+	transition: transform .18s ease;
+	z-index: 1;
+	}
+
+	#am1:checked ~ .segThumb{
+	transform: translateX(100%);
+	}
+
+	#am0:checked + label,
+	#am1:checked + label{
+	opacity: 1;
+	}
+
+    .grid{
+      display:grid;
+      gap:10px;
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+
+    label{ font-size:.9rem; opacity:.9; display:block; margin-bottom:6px; }
+    input[type="number"], input[type="date"], select{
+      width:100%;
+      padding:10px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.16);
+      color: #eaf0ff;
+      outline:none;
+    }
+    .btns{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    button{
+      border:none;
+      border-radius: 14px;
+      padding:10px 12px;
+      background: rgba(255,255,255,.12);
+      color:#eaf0ff;
+      cursor:pointer;
+      font-weight:650;
+    }
+    button:hover{ background: rgba(255,255,255,.16); }
+    .small{
+      font-size:.9rem;
+      opacity:.85;
+      line-height:1.35;
+    }
+
+    /* SVG sizing */
+    svg{ width:min(520px, 92vw); height:auto; display:block; }
+
+    /* keep labels crisp + avoid clipping */
+	.sliceText{
+	  font-size: 8px;          /* smaller for radial in-wedge labels */
+	  letter-spacing: .12px;
+	  paint-order: stroke;
+	  stroke-width: 2.2px;
+	}
+
+	.sliceText.day{
+		fill: var(--ink);
+		stroke: rgba(244,242,234,.75);  /* light halo on light side is subtle */
+	}
+	.sliceText.night{
+		fill: var(--chalk);
+		stroke: rgba(26,34,51,.80);     /* dark halo on dark side is subtle */
+	}
+
+    /* minimalist hour hand */
+    .hand{
+      stroke: rgba(255,255,255,.92);
+      stroke-width: 2.2;
+      stroke-linecap: round;
+    }
+    .handCap{
+      fill: rgba(255,255,255,.92);
+    }
+    .handShadow{
+      stroke: rgba(0,0,0,.35);
+      stroke-width: 4.6;
+      stroke-linecap: round;
+    }
+	.chatzotLineShadow{
+	stroke: rgba(0,0,0,.35);
+	stroke-width: 6.2;
+	stroke-linecap: round;
+	}
+	.chatzotLine{
+	stroke: var(--chatzot);
+	stroke-width: 3.2;
+	stroke-linecap: round;
+	opacity: .92;
+	}
+	input[type="range"]{ width:100%; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="panel clockCard">
+        <h1>Halachic Clock (Sha’ot Zmaniot)</h1>
+
+        <!-- Clock SVG -->
+        <svg id="clock" viewBox="0 0 420 420" role="img" aria-label="Halachic clock">
+          <defs>
+            <!-- subtle geometric motif (kept very quiet) -->
+            <pattern id="motifDay" width="36" height="36" patternUnits="userSpaceOnUse">
+              <path d="M18 2 L34 18 L18 34 L2 18 Z" fill="none" stroke="var(--motif2)" stroke-width="1"/>
+              <circle cx="18" cy="18" r="4.2" fill="none" stroke="var(--motif2)" stroke-width="1"/>
+            </pattern>
+            <pattern id="motifNight" width="36" height="36" patternUnits="userSpaceOnUse">
+              <path d="M18 2 L34 18 L18 34 L2 18 Z" fill="none" stroke="var(--motif)" stroke-width="1"/>
+              <circle cx="18" cy="18" r="4.2" fill="none" stroke="var(--motif)" stroke-width="1"/>
+            </pattern>
+
+            <!-- clip for moon (flat geometric) -->
+            <clipPath id="moonClip">
+              <circle id="moonCircle" cx="210" cy="278" r="26"></circle>
+            </clipPath>
+
+            <!-- textPath definitions live here (stable across renders) -->
+            <g id="tpDefs"></g>
+          </defs>
+
+
+          <!-- background ring -->
+          <circle cx="210" cy="210" r="202" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.10)" />
+
+          <!-- slices -->
+          <g id="slices"></g>
+
+          <!-- inner hub -->
+          <circle cx="210" cy="210" r="54" fill="rgba(0,0,0,.18)" stroke="rgba(255,255,255,.12)"></circle>
+
+          <!-- moon area (centered in night half) -->
+          <g id="moon"></g>
+
+          <!-- hour hand -->
+          <g id="hand"></g>
+        </svg>
+
+        <div class="meta">
+          <div class="hebrewDate" id="hebrewDate">—</div>
+          <div class="dow" id="hebrewDow">—</div>
+        </div>
+      </div>
+
+      <div class="panel list">
+        <h2>Zmanim</h2>
+        <div class="zlist" id="zlist"></div>
+
+        <details class="controls" id="controls">
+          <summary>
+            <span>Controls</span>
+            <span class="hint">hide / show</span>
+          </summary>
+          <div class="controlsBody">
+            <div class="grid">
+              <div>
+                <label>Latitude</label>
+                <input id="lat" type="number" step="0.0001" value="45.4280">
+              </div>
+              <div>
+                <label>Longitude</label>
+                <input id="lon" type="number" step="0.0001" value="-91.1500">
+              </div>
+              <div>
+                <label>Date</label>
+                <input id="date" type="date">
+              </div>
+              <div>
+                <label>Tzeit (after sunset)</label>
+                <select id="tzeit">
+                  <option value="40" selected>40 minutes</option>
+                  <option value="42">42 minutes</option>
+                  <option value="50">50 minutes</option>
+                  <option value="72">72 minutes</option>
+                </select>
+              </div>
+			  <div class="anchorControl">
+				<label>Clock anchor</label>
+
+				<div class="seg" role="tablist" aria-label="Clock anchor">
+				<input type="radio" name="anchorMode" id="am0" value="0" checked>
+				<label for="am0" role="tab">Netz on top</label>
+
+				<input type="radio" name="anchorMode" id="am1" value="1">
+				<label for="am1" role="tab">Chatzot on top</label>
+
+				<span class="segThumb" aria-hidden="true"></span>
+				</div>
+
+				<div class="small" id="anchorLabel" style="margin-top:6px; opacity:.9;">Top = Netz (Sunrise)</div>
+			  </div>
+
+
+            <div class="btns">
+              <button id="btnNow">Today</button>
+              <button id="btnGeo">Use my location</button>
+              <button id="btnRefresh">Refresh</button>
+            </div>
+
+            <div class="small" id="status">
+              Notes:
+              Day hours = (sunrise→sunset)/12; Night hours = (sunset→next sunrise)/12.
+              Clock top half is day; bottom half is night. The longer half expands outward.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**********************************************************************
+     * HALACHIC CLOCK — SINGLE-FILE IMPLEMENTATION (no frameworks)
+     *
+     * What we compute:
+     *  - Sunrise and sunset for the selected date and location (NOAA method)
+     *  - Day length (sunrise→sunset), Night length (sunset→next sunrise)
+     *  - Proportional halachic hours (sha'ot zmaniot):
+     *        shaahDay   = dayLength / 12
+     *        shaahNight = nightLength / 12
+     *
+     * Current halachic hour:
+     *  - If now in [sunrise, sunset): dayHour = floor((now-sunrise)/shaahDay)+1
+     *  - Else: nightHour = floor((now-sunset)/shaahNight)+1  (sunset belongs to night)
+     *
+     * Slice scaling logic:
+     *  - Angles are fixed: top semicircle = 12 day slices, bottom semicircle = 12 night slices
+     *  - Radii encode relative length:
+     *        outerDay  = base + (shaahDay   / max(shaahDay, shaahNight)) * span
+     *        outerNight= base + (shaahNight / max(shaahDay, shaahNight)) * span
+     *    => the longer proportional hour pushes its half outward.
+     *
+     * Moon phase logic (astronomically accurate enough for UI):
+     *  - Compute phase fraction using a known new moon epoch (2000-01-06 18:14 UTC)
+     *  - synodic month = 29.530588853 days
+     *  - phase in [0,1): 0=new, 0.25=first quarter, 0.5=full, 0.75=last quarter
+     *  - Draw a flat geometric moon using circle clip + offset shadow disc.
+     **********************************************************************/
+
+    // ---------- Helpers ----------
+    const $ = (id)=>document.getElementById(id);
+	const DEBUG_ARCS = false;
+	const DEBUG_TP_VISUAL = true;
+	let __refreshN = 0;
+	let __lastGoodDateStr = "";
+	let __lastGoodState = null;
+
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    function pad2(n){ return String(n).padStart(2,'0'); }
+
+    function fmtTime(d){
+      if(!d || isNaN(d.getTime())) return "—";
+      return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+
+    // For Hebrew date (built-in Intl Hebrew calendar).
+    function getHebrewDateStrings(date){
+      // Hebrew calendar formatting is supported in modern browsers.
+      const heDateFmt = new Intl.DateTimeFormat('he-u-ca-hebrew', { day:'numeric', month:'long', year:'numeric' });
+      const heDowFmt  = new Intl.DateTimeFormat('he', { weekday:'long' });
+      return {
+        hebrewDate: heDateFmt.format(date),
+        hebrewDow: heDowFmt.format(date)
+      };
+    }
+
+    // Degrees to radians
+    const d2r = (deg)=>deg*Math.PI/180;
+
+    // Polar to cartesian (SVG coordinate system: x right, y down)
+    function polar(cx, cy, r, deg){
+      const rad = d2r(deg);
+      return { x: cx + r*Math.cos(rad), y: cy + r*Math.sin(rad) };
+    }
+
+    // Donut sector path (startDeg->endDeg, clockwise, with inner radius)
+    // --- Angle helpers (clockwise sweep) ---
+	function normDeg(deg){
+		deg = deg % 360;
+		if (deg < 0) deg += 360;
+		return deg;
+	}
+
+	// returns a clockwise sweep in (0, 360), tolerant of end<start and huge angles
+	function cwSweepDeg(startDeg, endDeg){
+		const a0 = normDeg(startDeg);
+		const a1 = normDeg(endDeg);
+		let s = a1 - a0;
+		if (s <= 0) s += 360;
+		// prevent pathological 0 or 360 sweeps (SVG arcs get weird there)
+		const EPS = 1e-6;
+		if (s < EPS) s = EPS;
+		if (s > 360 - EPS) s = 360 - EPS;
+		return s;
+	}
+
+	// Donut sector path (startDeg->endDeg, clockwise, robust across wrap)
+	function donutSectorPath(cx, cy, rOuter, rInner, startDeg, endDeg){
+		const a0 = normDeg(startDeg);
+		const sweep = cwSweepDeg(startDeg, endDeg);
+		const a1 = a0 + sweep; // IMPORTANT: keep end > start (no wrap surprises)
+
+		const large = sweep > 180 ? 1 : 0;
+
+		const p1 = polar(cx, cy, rOuter, a0);
+		const p2 = polar(cx, cy, rOuter, a1);
+		const p3 = polar(cx, cy, rInner, a1);
+		const p4 = polar(cx, cy, rInner, a0);
+
+		return [
+			`M ${p1.x.toFixed(3)} ${p1.y.toFixed(3)}`,
+			`A ${rOuter.toFixed(3)} ${rOuter.toFixed(3)} 0 ${large} 1 ${p2.x.toFixed(3)} ${p2.y.toFixed(3)}`,
+			`L ${p3.x.toFixed(3)} ${p3.y.toFixed(3)}`,
+			`A ${rInner.toFixed(3)} ${rInner.toFixed(3)} 0 ${large} 0 ${p4.x.toFixed(3)} ${p4.y.toFixed(3)}`,
+			"Z"
+		].join(" ");
+	}
+
+
+
+    // Arc path for text (single arc, not donut). We use the mid-radius of the slice.
+    function arcPath(cx, cy, r, startDeg, endDeg){
+		const a0 = normDeg(startDeg);
+		const sweep = cwSweepDeg(startDeg, endDeg);
+		const a1 = a0 + sweep;
+
+		const large = sweep > 180 ? 1 : 0;
+		const p1 = polar(cx, cy, r, a0);
+		const p2 = polar(cx, cy, r, a1);
+
+		return `M ${p1.x.toFixed(3)} ${p1.y.toFixed(3)} A ${r.toFixed(3)} ${r.toFixed(3)} 0 ${large} 1 ${p2.x.toFixed(3)} ${p2.y.toFixed(3)}`;
+	}
+
+
+    // ---------- NOAA Solar (sunrise/sunset) ----------
+    // Based on NOAA Solar Calculator approach (sufficient for zmanim UI).
+    // Returns Date object in local time.
+    function solarEventLocal(dateLocal, lat, lon, isSunrise){
+  // Robust NOAA method using equation of time + solar declination.
+  // Returns a local Date for sunrise/sunset, or Invalid Date for polar day/night.
+
+  const zenithDeg = 90.833; // official sunrise/sunset
+  const zenith = d2r(zenithDeg);
+
+  const year  = dateLocal.getFullYear();
+  const month = dateLocal.getMonth();
+  const day   = dateLocal.getDate();
+
+  // Day of year N (1..366)
+  const N = Math.floor((Date.UTC(year, month, day) - Date.UTC(year, 0, 0)) / 86400000);
+
+  // Timezone offset in minutes east of UTC (e.g. CDT = +300)
+  const tzMin = -new Date(year, month, day, 12, 0, 0).getTimezoneOffset();
+
+  // Fractional year (radians). Use local noon to avoid DST-edge weirdness.
+  const gamma = 2 * Math.PI / 365 * (N - 1 + (12 - 12) / 24);
+
+  // Equation of time (minutes)
+  const eqtime =
+    229.18 * (0.000075
+      + 0.001868 * Math.cos(gamma)
+      - 0.032077 * Math.sin(gamma)
+      - 0.014615 * Math.cos(2 * gamma)
+      - 0.040849 * Math.sin(2 * gamma));
+
+  // Solar declination (radians)
+  const decl =
+    0.006918
+    - 0.399912 * Math.cos(gamma)
+    + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma)
+    + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma)
+    + 0.00148  * Math.sin(3 * gamma);
+
+  const latRad = d2r(lat);
+
+  // Hour angle (radians)
+  const cosH =
+    (Math.cos(zenith) - Math.sin(latRad) * Math.sin(decl)) /
+    (Math.cos(latRad) * Math.cos(decl));
+
+  // Polar day/night guard
+  if (!Number.isFinite(cosH) || cosH > 1 || cosH < -1){
+    return new Date(NaN);
+  }
+
+  const H = Math.acos(clamp(cosH, -1, 1));           // radians
+  const haMin = (H * 180 / Math.PI) * 4;            // minutes (1° = 4 min)
+
+  // Solar noon in local minutes from midnight
+  // (720 = 12:00, -4*lon corrects for longitude, +tzMin applies local offset)
+  const solarNoonMin = 720 - 4 * lon - eqtime + tzMin;
+
+  const eventMin = isSunrise
+    ? (solarNoonMin - haMin)
+    : (solarNoonMin + haMin);
+
+  const base = new Date(year, month, day, 0, 0, 0, 0);
+  return new Date(base.getTime() + eventMin * 60000);
+}
+
+    // ---------- Moon phase ----------
+    function moonPhaseFraction(date){
+      // Epoch: 2000-01-06 18:14 UTC (known new moon)
+      const epoch = Date.UTC(2000,0,6,18,14,0);
+      const synodic = 29.530588853 * 86400000; // ms
+      const now = date.getTime();
+      const frac = ((now - epoch) % synodic + synodic) % synodic / synodic; // [0,1)
+      return frac;
+    }
+
+    // Draw flat moon: bright disc + clipped shadow disc offset
+    function renderMoon(g, phaseFrac){
+	const cx = 210, cy = 278, r = 26;
+	g.innerHTML = "";
+
+	// bright disc
+	const base = document.createElementNS("http://www.w3.org/2000/svg","circle");
+	base.setAttribute("cx", cx);
+	base.setAttribute("cy", cy);
+	base.setAttribute("r", r);
+	base.setAttribute("fill", "rgba(248,251,255,.92)");
+	base.setAttribute("stroke", "rgba(255,255,255,.20)");
+	g.appendChild(base);
+
+	// dark "shadow" disc that we shift left/right to reveal illumination
+	const shadow = document.createElementNS("http://www.w3.org/2000/svg","circle");
+	shadow.setAttribute("cx", cx);
+	shadow.setAttribute("cy", cy);
+	shadow.setAttribute("r", r);
+	shadow.setAttribute("clip-path","url(#moonClip)");
+	shadow.setAttribute("fill", "rgba(26,34,51,.92)");
+	g.appendChild(shadow);
+
+	// phaseFrac: 0=new, 0.5=full
+	const waxing = phaseFrac < 0.5;
+
+	// Geometry that behaves correctly at key phases:
+	// new: dx = 0 (fully dark)
+	// quarter: |dx| ≈ r (half lit)
+	// full: |dx| ≈ 2r (shadow moved off disc -> fully lit)
+	const phaseAngle = 2 * Math.PI * phaseFrac;
+	const mag = (1 - Math.cos(phaseAngle)) * r;
+
+	// Northern hemisphere convention: waxing => light grows on the RIGHT
+	// To make the RIGHT side brighter, shift the dark disc LEFT (negative dx).
+	const dx = (waxing ? -1 : 1) * mag;
+
+	shadow.setAttribute("transform", `translate(${dx.toFixed(2)},0)`);
+
+      // Small outline ring for calm geometry
+      const ring = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      ring.setAttribute("cx", cx);
+      ring.setAttribute("cy", cy);
+      ring.setAttribute("r", r+7);
+      ring.setAttribute("fill","none");
+      ring.setAttribute("stroke","rgba(255,255,255,.10)");
+      g.appendChild(ring);
+    }
+
+    // ---------- Zmanim & Slice Placement ----------
+    function addMinutes(d, mins){ return new Date(d.getTime() + mins*60000); }
+
+    function isBetween(t, a, b){ return t >= a && t < b; }
+
+    // Determine which slice (0..11) and whether day/night for a given time
+    function sliceForTime(t, sunrise, sunset, nextSunrise, shaahDay, shaahNight, prevSunset, shaahNightPrev){
+		if (t >= sunrise && t < sunset){
+			const idx = clamp(Math.floor((t - sunrise) / shaahDay), 0, 11);
+			return { period:"day", idx };
+		}
+		if (t >= sunset && t < nextSunrise){
+			const idx = clamp(Math.floor((t - sunset) / shaahNight), 0, 11);
+			return { period:"night", idx };
+		}
+		// after midnight, before sunrise: still night since prevSunset
+		if (t < sunrise){
+			const idx = clamp(Math.floor((t - prevSunset) / shaahNightPrev), 0, 11);
+			return { period:"night", idx };
+		}
+		return { period:"night", idx: 0 };
+	}
+
+
+
+    // ---------- Render Clock ----------
+    function renderClock(state){
+      const slicesG = $("slices");
+      const handG = $("hand");
+      const moonG = $("moon");
+      slicesG.innerHTML = "";
+      handG.innerHTML = "";
+
+      const cx=210, cy=210;
+      const rInner = 52;
+
+      // --- NEW: arc sizes proportional to day vs night length (Excel-style) ---
+	// Total cycle is sunset->next sunset, but for visual proportion we use
+	// dayLength + nightLength = 24h (approx). DayArc + NightArc = 360°.
+	// --- Proportional day/night arcs (guarded) ---
+	let dayLen = state.dayLength;
+	let nightLen = state.nightLength;
+
+	// Guard against NaN / non-finite / negative lengths (common “everything breaks” cause)
+	if (!Number.isFinite(dayLen) || !Number.isFinite(nightLen) || dayLen <= 0 || nightLen <= 0) {
+		dayLen = 12 * 3600000;
+		nightLen = 12 * 3600000;
+	}
+
+	const totalLen = dayLen + nightLen;
+	let dayFrac = (totalLen > 0) ? (dayLen / totalLen) : 0.5;
+
+	// Prevent pathological near-0 or near-1 that can create tiny slices + padding inversions
+		dayFrac = clamp(dayFrac, 0.02, 0.98);
+
+	const dayArc = 360 * dayFrac;
+	const nightArc = 360 - dayArc;
+
+	const stepDay = dayArc / 12;
+	const stepNight = nightArc / 12;
+
+
+	const topDeg = 270; // 12 o'clock in our polar helper
+
+	let dayStart, dayEnd, nightStart;
+
+	// anchorMode: 0 = top is sunrise seam (Netz), 1 = top is Chatzot Hayom
+	if ((state.anchorMode ?? 0) === 0) {
+	// Mode A: Sunrise (Netz) is straight up (top seam)
+		dayStart = topDeg;
+		dayEnd   = dayStart + dayArc;
+		nightStart = dayEnd;
+	} else {
+	// Mode B: Chatzot Hayom straight up; Chatzot Halailah straight down
+	// (midpoint of day arc at topDeg)
+		dayStart = topDeg - dayArc/2;
+		dayEnd   = dayStart + dayArc;
+		nightStart = dayEnd;
+	}
+
+	// Map an exact time to an exact angle on the proportional day/night arcs
+// Use HALF-OPEN intervals to avoid seam ambiguity:
+// Day:  [sunrise, sunset)
+// Night:[sunset, nextSunrise)
+// Prev-night: (prevSunset, sunrise)
+function angleForTime(t){
+  if (t >= state.sunrise && t < state.sunset){
+    const f = clamp((t - state.sunrise) / state.dayLength, 0, 1);
+    return dayStart + dayArc * f;
+  }
+  if (t >= state.sunset && t < state.nextSunrise){
+    const f = clamp((t - state.sunset) / state.nightLength, 0, 1);
+    return nightStart + nightArc * f;
+  }
+  if (t < state.sunrise){
+    const prevNightLen = (state.sunrise - state.prevSunset);
+    const f = clamp((t - state.prevSunset) / prevNightLen, 0, 1);
+    const nightPrevStart = dayStart - nightArc;
+    return nightPrevStart + nightArc * f;
+  }
+  return dayStart;
+}
+
+// ---------- DEBUG: label + wedge diagnostics ----------
+function inWedgeCW(a0, a1, aT){
+  // Membership test that ALLOWS equality at start seam.
+  // Uses a raw clockwise delta that returns 0 when equal.
+  const A0 = normDeg(a0), A1 = normDeg(a1), AT = normDeg(aT);
+
+  // raw cw delta in [0,360)
+  const d = (x, y) => ( (y - x + 360) % 360 );
+
+  const span = d(A0, A1);   // wedge size (should be step)
+  const off  = d(A0, AT);   // where point falls from a0
+
+  // inclusive at start, exclusive at end to match [a0,a1)
+  // add tiny epsilon for floating noise
+  const EPS = 1e-7;
+  return off >= -EPS && off < span - EPS;
+}
+
+function dbgTime(d){
+  return d ? `${fmtTime(d)}.${String(d.getMilliseconds()).padStart(3,"0")}` : "—";
+}
+
+function logGlobalTiming(){
+  console.log("[ZMANIM GLOBAL]", {
+    sunrise: dbgTime(state.sunrise),
+    sunset: dbgTime(state.sunset),
+    nextSunrise: dbgTime(state.nextSunrise),
+    prevSunset: dbgTime(state.prevSunset),
+    dayLenMin: +(state.dayLength/60000).toFixed(3),
+    nightLenMin: +(state.nightLength/60000).toFixed(3),
+    dayArc: +dayArc.toFixed(6),
+    nightArc: +nightArc.toFixed(6),
+    dayStart: +dayStart.toFixed(6),
+    nightStart: +nightStart.toFixed(6),
+    stepDay: +stepDay.toFixed(9),
+    stepNight: +stepNight.toFixed(9),
+  });
+}
+logGlobalTiming();
+	
+	// ---------- DEBUG: label + wedge diagnostics ----------
+function inWedgeCW(a0, a1, aT){
+  // Membership test that ALLOWS equality at start seam.
+  // Uses a raw clockwise delta that returns 0 when equal.
+  const A0 = normDeg(a0), A1 = normDeg(a1), AT = normDeg(aT);
+
+  // raw cw delta in [0,360)
+  const d = (x, y) => ( (y - x + 360) % 360 );
+
+  const span = d(A0, A1);   // wedge size (should be step)
+  const off  = d(A0, AT);   // where point falls from a0
+
+  // inclusive at start, exclusive at end to match [a0,a1)
+  // add tiny epsilon for floating noise
+  const EPS = 1e-7;
+  return off >= -EPS && off < span - EPS;
+}
+
+function dbgTime(d){
+  return d ? `${fmtTime(d)}.${String(d.getMilliseconds()).padStart(3,"0")}` : "—";
+}
+
+function logGlobalTiming(){
+  console.log("[ZMANIM GLOBAL]", {
+    sunrise: dbgTime(state.sunrise),
+    sunset: dbgTime(state.sunset),
+    nextSunrise: dbgTime(state.nextSunrise),
+    prevSunset: dbgTime(state.prevSunset),
+    dayLenMin: +(state.dayLength/60000).toFixed(3),
+    nightLenMin: +(state.nightLength/60000).toFixed(3),
+    dayArc: +dayArc.toFixed(6),
+    nightArc: +nightArc.toFixed(6),
+    dayStart: +dayStart.toFixed(6),
+    nightStart: +nightStart.toFixed(6),
+    stepDay: +stepDay.toFixed(9),
+    stepNight: +stepNight.toFixed(9),
+  });
+}
+logGlobalTiming();
+
+if (DEBUG_ARCS) {
+  const msg = {
+    dayArc: +dayArc.toFixed(3),
+    nightArc: +nightArc.toFixed(3),
+    dayStart: +dayStart.toFixed(3),
+    dayEnd: +dayEnd.toFixed(3),
+    nightStart: +nightStart.toFixed(3),
+    stepDay: +stepDay.toFixed(3),
+    stepNight: +stepNight.toFixed(3),
+    dayLenMin: +((state.dayLength||0)/60000).toFixed(2),
+    nightLenMin: +((state.nightLength||0)/60000).toFixed(2),
+  };
+
+  const d0a0 = dayStart + 0*stepDay, d0a1 = dayStart + 1*stepDay;
+  const d11a0 = dayStart + 11*stepDay, d11a1 = dayStart + 12*stepDay;
+  const n0a0 = nightStart + 0*stepNight, n0a1 = nightStart + 1*stepNight;
+  const n11a0 = nightStart + 11*stepNight, n11a1 = nightStart + 12*stepNight;
+
+  const sweepBad = (a0, a1) => {
+    const s = cwSweepDeg(a0, a1);
+    return (s <= 0.0001 || s >= 359.999);
+  };
+
+  console.log("[CLOCK ARCS]", msg, {
+    day0: { a0: d0a0, a1: d0a1, sweep: cwSweepDeg(d0a0, d0a1), bad: sweepBad(d0a0, d0a1) },
+    day11:{ a0: d11a0, a1: d11a1, sweep: cwSweepDeg(d11a0, d11a1), bad: sweepBad(d11a0, d11a1) },
+    night0:{ a0: n0a0, a1: n0a1, sweep: cwSweepDeg(n0a0, n0a1), bad: sweepBad(n0a0, n0a1) },
+    night11:{ a0: n11a0, a1: n11a1, sweep: cwSweepDeg(n11a0, n11a1), bad: sweepBad(n11a0, n11a1) },
+  });
+
+  const overlay = document.createElementNS("http://www.w3.org/2000/svg","text");
+  overlay.setAttribute("x", "12");
+  overlay.setAttribute("y", "404");
+  overlay.setAttribute("fill", "rgba(255,255,255,.78)");
+  overlay.setAttribute("font-size", "10");
+  overlay.setAttribute("font-family", "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace");
+  overlay.textContent =
+    `dayArc=${dayArc.toFixed(1)} nightArc=${nightArc.toFixed(1)} dayStart=${dayStart.toFixed(1)} nightStart=${nightStart.toFixed(1)}`;
+  handG.appendChild(overlay);
+}
+      // Slice radii scale by proportional hour length (day vs night)
+      const rOuter = 190;          // single outer edge for the whole ring
+	  const rDayOuter = rOuter;
+	  const rNightOuter = rOuter;
+
+      // Build defs for text paths (stable container inside root <defs>)
+      const defs = document.getElementById("tpDefs");
+      if (!defs) {
+        console.warn("[TPDEFS] missing #tpDefs (SVG markup patch not applied?)");
+      } else {
+        // Clear only textPath defs we own, keep patterns/clipPaths intact.
+        defs.innerHTML = "";
+      }
+
+
+      // Collect label stacks per slice to avoid overcrowding
+      const labelStacks = new Map(); // key: period-idx -> count
+
+      function stackIndex(period, idx){
+  const key = `${period}-${idx}`;
+  const n = labelStacks.get(key) || 0;
+  labelStacks.set(key, n + 1);
+  return n; // 0,1,2...
+}
+	  
+	  function fitLabelToArc(text, r, a0, a1){
+		const sweep = cwSweepDeg(a0, a1);              // seam-safe
+		const arcLen = d2r(sweep) * r;
+		const maxChars = Math.max(3, Math.floor(arcLen / 5.5));
+		if (text.length <= maxChars) return text;
+		return text.slice(0, Math.max(2, maxChars - 1)) + "…";
+	}
+
+
+      // Draw day slices
+      for(let i=0;i<12;i++){
+		const a0 = dayStart + i*stepDay;
+		const a1 = dayStart + (i+1)*stepDay;
+
+		const p = document.createElementNS("http://www.w3.org/2000/svg","path");
+		p.setAttribute("d", donutSectorPath(cx,cy,rDayOuter,rInner,a0,a1));
+		p.setAttribute("fill", "var(--day)");
+		p.setAttribute("stroke", "var(--line)");
+		p.setAttribute("stroke-width", "1");
+		slicesG.appendChild(p);
+
+		const p2 = document.createElementNS("http://www.w3.org/2000/svg","path");
+		p2.setAttribute("d", donutSectorPath(cx,cy,rDayOuter,rInner,a0,a1));
+		p2.setAttribute("fill", "url(#motifDay)");
+		p2.setAttribute("opacity", "0.55");
+		slicesG.appendChild(p2);
+
+		const edge = document.createElementNS("http://www.w3.org/2000/svg","path");
+		edge.setAttribute("d", arcPath(cx,cy,rDayOuter,a0,a1));
+		edge.setAttribute("fill","none");
+		edge.setAttribute("stroke","rgba(12,18,32,.20)");
+		edge.setAttribute("stroke-width","1");
+		slicesG.appendChild(edge);
+	}
+
+
+      // Draw night slices
+      for(let i=0;i<12;i++){
+		const a0 = nightStart + i*stepNight;
+		const a1 = nightStart + (i+1)*stepNight;
+
+		const p = document.createElementNS("http://www.w3.org/2000/svg","path");
+		p.setAttribute("d", donutSectorPath(cx,cy,rNightOuter,rInner,a0,a1));
+		p.setAttribute("fill", "var(--night)");
+		p.setAttribute("stroke", "var(--line2)");
+		p.setAttribute("stroke-width", "1");
+		slicesG.appendChild(p);
+
+		const p2 = document.createElementNS("http://www.w3.org/2000/svg","path");
+		p2.setAttribute("d", donutSectorPath(cx,cy,rNightOuter,rInner,a0,a1));
+		p2.setAttribute("fill", "url(#motifNight)");
+		p2.setAttribute("opacity", "0.55");
+		slicesG.appendChild(p2);
+
+		const edge = document.createElementNS("http://www.w3.org/2000/svg","path");
+		edge.setAttribute("d", arcPath(cx,cy,rNightOuter,a0,a1));
+		edge.setAttribute("fill","none");
+		edge.setAttribute("stroke","rgba(248,251,255,.14)");
+		edge.setAttribute("stroke-width","1");
+		slicesG.appendChild(edge);
+	}
+	
+	function drawChatzotLine(angleDeg){
+	const a = angleDeg;
+	const pA = polar(cx, cy, rOuter, a);
+	const pB = polar(cx, cy, rOuter, a + 180);
+
+	const sh = document.createElementNS("http://www.w3.org/2000/svg","line");
+	sh.setAttribute("x1", pA.x); sh.setAttribute("y1", pA.y);
+	sh.setAttribute("x2", pB.x); sh.setAttribute("y2", pB.y);
+	sh.setAttribute("class", "chatzotLineShadow");
+	slicesG.appendChild(sh);
+
+	const ln = document.createElementNS("http://www.w3.org/2000/svg","line");
+	ln.setAttribute("x1", pA.x); ln.setAttribute("y1", pA.y);
+	ln.setAttribute("x2", pB.x); ln.setAttribute("y2", pB.y);
+	ln.setAttribute("class", "chatzotLine");
+	slicesG.appendChild(ln);
+	}
+
+	// Chatzot hayom angle is the midpoint of day arc:
+	const chatzotHayomDeg = dayStart + dayArc/2;
+	drawChatzotLine(chatzotHayomDeg);
+
+
+
+      // Add curved labels for selected zmanim (kept sparse for legibility)
+      // We'll map each zman to its slice and place text along that slice's arc.
+      const labels = state.labels;
+// --- Diagnostics helpers for textPaths ---
+const __tpIdSeen = new Set();
+function __tpWarn(obj){ console.warn("[TP]", obj); }
+function __tpInfo(obj){ console.log("[TP]", obj); }
+
+// TRUE CW delta in [0, 360). This CAN return 0 at the seam (unlike cwSweepDeg).
+function __cwDelta0(a0, aX){
+  const A0 = normDeg(a0);
+  const AX = normDeg(aX);
+  return (AX - A0 + 360) % 360;
+}
+
+// Convert a point angle to its CW offset from a0, then unwrap into [a0, a0+sweep]
+function __unwrapIntoWedge(a0, a1, aT){
+  const sweep = cwSweepDeg(a0, a1);        // (0,360) with EPS protection for wedges
+  const offT  = __cwDelta0(a0, aT);        // [0,360) seam-safe
+  // Clamp the point into the wedge span. If exactly at seam => offT=0.
+  const off = Math.min(offT, sweep);
+  return { sweep, AT: a0 + off, offT };
+}
+
+// Compute a stable label arc inside wedge using unwrapped coordinates.
+function __labelArcInWedge(a0, a1, aT, padDeg, halfWindowDeg){
+  const { sweep, AT, offT } = __unwrapIntoWedge(a0, a1, aT);
+
+  const MIN_SWEEP = 0.9; // deg: guarantees non-zero visible path length
+  const L = a0 + padDeg;
+  const R = a0 + sweep - padDeg;
+  const usable = R - L;
+
+  // If wedge becomes too tight after padding, relax padding but keep a non-zero arc.
+  if (usable < MIN_SWEEP){
+    const L2 = a0 + 0.2;
+    const R2 = a0 + sweep - 0.2;
+    const usable2 = R2 - L2;
+    return {
+      left: L2,
+      right: (usable2 >= MIN_SWEEP) ? R2 : (L2 + MIN_SWEEP),
+      sweep: Math.max(MIN_SWEEP, usable2),
+      usable: usable2,
+      offT
+    };
+  }
+
+  let left  = Math.max(L, AT - halfWindowDeg);
+  let right = Math.min(R, AT + halfWindowDeg);
+
+  // Ensure positive span in unwrapped space
+  if ((right - left) < MIN_SWEEP){
+    left = L;
+    right = R;
+    if ((right - left) < MIN_SWEEP) right = left + MIN_SWEEP;
+  }
+
+  return { left, right, sweep: (right - left), usable, offT };
+}
+
+labels.forEach((z, zi)=>{
+
+  // Determine period like halachic rules:
+  const isDay = (z.time >= state.sunrise && z.time < state.sunset);
+  const isPrevNight = (!isDay && z.time < state.sunrise);
+  const outer = isDay ? rDayOuter : rNightOuter;
+
+  // Compute idx from TIME deltas (robust at seams)
+  let idx;
+  if (isDay){
+    idx = clamp(Math.floor((z.time - state.sunrise) / state.shaahDay), 0, 11);
+  } else if (!isPrevNight){
+    idx = clamp(Math.floor((z.time - state.sunset) / state.shaahNight), 0, 11);
+  } else {
+    idx = clamp(Math.floor((z.time - state.prevSunset) / state.shaahNightPrev), 0, 11);
+  }
+
+  const base = isDay
+    ? dayStart
+    : (isPrevNight ? (dayStart - nightArc) : nightStart);
+
+  const step = isDay ? stepDay : stepNight;
+
+  // Wedge bounds (unwrapped)
+  const a0 = base + idx*step;
+  const a1 = base + (idx+1)*step;
+
+  // Exact-time angle
+  const aT = angleForTime(z.time);
+
+  // --- label lane / stacking ---
+  const nStack = stackIndex(isDay ? "day" : "night", idx);
+
+  const PAD_OUTER = 18;
+  const PAD_INNER = 14;
+  const LANE = 0.62;
+
+  const rMin = rInner + PAD_INNER;
+  const rMax = outer  - PAD_OUTER;
+    const rLane = rMin + (rMax - rMin) * LANE;
+
+  const STACK_STEP = 10;
+const stackOff = nStack * STACK_STEP;  // inward stack amount (px)
+const rText = rLane - stackOff;        // the arc radius
+
+// HARD GUARD: if rText goes non-finite or too small, the path can exist but text will vanish.
+if (!Number.isFinite(rText) || rText <= (rInner + 14)) {
+  __tpWarn({ why:"bad rText", name:z.name, rText, rInner, off: stackOff, idx, isDay });
+  return;
+}
+
+  // --- Stable arc inside wedge (seam-safe, non-degenerate) ---
+const PAD = 1.6;
+
+// Estimate how many DEGREES of arc we need to fit this label.
+// (We keep it conservative; if we overshoot, we clamp to wedge anyway.)
+function __degNeededForLabel(str, r){
+  // crude but effective: avg glyph ~5.8px at 9px font, plus a little cushion
+  const px = Math.max(14, str.length * 5.8 + 10);
+  const rad = px / r;
+  return rad * 180 / Math.PI;
+}
+
+const desiredSweep = __degNeededForLabel(z.short, rText);
+
+// Choose halfWindow dynamically, but don't exceed wedge/2
+const wedgeSweep = cwSweepDeg(a0, a1);
+const halfWindow = clamp(desiredSweep / 2, 5, Math.max(6, (wedgeSweep - 2*PAD) / 2));
+
+const arc = __labelArcInWedge(a0, a1, aT, PAD, halfWindow);
+let left = arc.left;
+let right = arc.right;
+
+// FINAL GUARANTEE: ensure the arc is long enough for the label.
+// If not, use full wedge minus padding.
+const sweepNow = right - left;
+if (sweepNow < desiredSweep && (arc.usable >= desiredSweep)) {
+  left = a0 + PAD;
+  right = a0 + wedgeSweep - PAD;
+}
+
+  // Make IDs unique across refreshes + ensure no duplicates
+  const pathId = `tp-${__refreshN}-${isDay ? "day" : "night"}-${idx}-${zi}`;
+  if (__tpIdSeen.has(pathId)) {
+    __tpWarn({ why:"duplicate pathId", pathId, name:z.name });
+  }
+  __tpIdSeen.add(pathId);
+
+  const dPath = arcPath(cx, cy, rText, left, right);
+
+const tp = document.createElementNS("http://www.w3.org/2000/svg","path");
+tp.setAttribute("id", pathId);
+tp.setAttribute("d", dPath);
+defs && defs.appendChild(tp);
+
+// VISUAL DEBUG: draw the same arc in the main scene so we can see it
+if (DEBUG_TP_VISUAL) {
+  const vis = document.createElementNS("http://www.w3.org/2000/svg","path");
+  vis.setAttribute("d", dPath);
+  vis.setAttribute("fill", "none");
+  vis.setAttribute("stroke", isDay ? "rgba(0,0,0,.35)" : "rgba(255,255,255,.30)");
+  vis.setAttribute("stroke-width", "1.2");
+  vis.setAttribute("stroke-dasharray", "3 3");
+  vis.setAttribute("pointer-events", "none");
+  slicesG.appendChild(vis);
+}
+
+
+  // --- RADIAL LABEL: start at outer edge and run inward toward center ---
+
+// Use wedge center angle (seam-safe)
+const wedgeSweep2 = cwSweepDeg(a0, a1);
+
+// fan labels left/right inside wedge so they don't sit on the same ray
+const JITTER_STEP_DEG = 1.6; // small + readable
+const k = Math.ceil(nStack / 2);             // 0,1,1,2,2...
+const sign = (nStack % 2 === 0) ? 0 : (nStack % 4 === 1 ? 1 : -1); // 0,+1,-1,+2,-2 pattern
+const jitter = sign * k * JITTER_STEP_DEG;
+
+// keep jitter inside the wedge
+const JITTER_LIMIT = Math.max(0, wedgeSweep2 / 2 - 2.0);
+const aC = (a0 + wedgeSweep2 / 2) + clamp(jitter, -JITTER_LIMIT, JITTER_LIMIT);
+
+// Start near the outer edge (wide side), then stack inward
+
+// how far from the very edge to start
+const EDGE_PAD = 14;
+
+// stack inward: each additional label starts further toward center
+const rStart = (outer - EDGE_PAD) - stackOff;
+
+// Clamp so we never start inside the hub
+const rStartClamped = Math.max(rStart, rInner + 16);
+
+// Position at the start point on the ray
+const pStart = polar(cx, cy, rStartClamped, aC);
+
+// Rotate so text runs inward (toward center)
+const rot = aC + 180;
+
+// Create a group so rotation happens around the start point
+const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+g.setAttribute("transform", `translate(${pStart.x.toFixed(3)} ${pStart.y.toFixed(3)}) rotate(${rot.toFixed(3)})`);
+
+// The label itself
+const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+t.setAttribute("class", `sliceText ${isDay ? "day" : "night"}`);
+t.setAttribute("text-anchor", "start");           // start at the outer edge
+t.setAttribute("dominant-baseline", "middle");
+
+// OPTIONAL: slight nudge so it sits nicer visually inside the wedge
+t.setAttribute("dx", "0");
+t.setAttribute("dy", isDay ? "-0.10em" : "0.10em");
+
+// Fit the label to available radial run (outer -> inner)
+const radialAvailPx = Math.max(10, (rStartClamped - (rInner + 18)));
+const maxChars = Math.max(3, Math.floor(radialAvailPx / 6.0)); // ~6px per glyph at 8px font
+let txt = z.short;
+if (txt.length > maxChars) txt = txt.slice(0, Math.max(2, maxChars - 1)) + "…";
+
+const title = document.createElementNS("http://www.w3.org/2000/svg","title");
+title.textContent = z.name;
+t.appendChild(title);
+
+t.textContent = txt;
+
+g.appendChild(t);
+slicesG.appendChild(g);
+
+  // --- Conclusive diagnostics (after layout) ---
+  // We can only reliably read path length + bbox after the nodes are in the DOM.
+  requestAnimationFrame(()=>{
+    const el = document.getElementById(pathId);
+    if (!el) {
+      __tpWarn({ why:"pathId not found in DOM", pathId, name:z.name });
+      return;
+    }
+
+    let len = NaN;
+    try { len = el.getTotalLength(); } catch (e) {}
+
+    let bb = null;
+try { bb = t.getBBox(); } catch (e) {}
+
+const cs = (() => {
+  try {
+    const s = getComputedStyle(t);
+    return { display:s.display, visibility:s.visibility, opacity:s.opacity, fill:s.fill, stroke:s.stroke };
+  } catch (e) { return null; }
+})();
+
+    // If length is tiny or bbox is empty, textPath won’t render (or renders invisibly)
+    if (!Number.isFinite(len) || len <= 1) {
+      __tpWarn({
+        why:"textPath length too small",
+        name: z.name,
+        pathId,
+        len,
+        rText: +rText.toFixed(2),
+        left: +left.toFixed(3),
+        right:+right.toFixed(3),
+        sweep:+arc.sweep.toFixed(3),
+        usable:+arc.usable.toFixed(3),
+        a0:+a0.toFixed(3),
+        a1:+a1.toFixed(3),
+        aT:+aT.toFixed(3),
+        inWedge: inWedgeCW(a0, a1, aT),
+      });
+    } else if (!bb || bb.width <= 0 || bb.height <= 0) {
+      __tpWarn({
+  why:"text bbox empty (unresolved href, too-short path, or glyph layout failed)",
+  name: z.name,
+  pathId,
+  len,
+  style: cs,
+  bbox: bb ? { x:bb.x, y:bb.y, w:bb.width, h:bb.height } : null,
+  rText: +rText.toFixed(2),
+  left: +left.toFixed(3),
+  right:+right.toFixed(3),
+  desiredSweep: +desiredSweep.toFixed(3),
+  actualSweep: +(right-left).toFixed(3),
+  wedgeSweep: +cwSweepDeg(a0,a1).toFixed(3),
+});
+    } else {
+      // Uncomment if you want noisy success logs:
+      // __tpInfo({ ok:true, name:z.name, pathId, len:+len.toFixed(2), bbox:{ w:+bb.width.toFixed(2), h:+bb.height.toFixed(2) } });
+    }
+  });
+
+  // Keep your existing debug log (but now include arc sweep/usable)
+  console.log("[ZMAN LABEL FIXED]", {
+    name: z.name,
+    time: dbgTime(z.time),
+    isDay,
+    idx,
+    a0: +a0.toFixed(6),
+    a1: +a1.toFixed(6),
+    aT: +aT.toFixed(6),
+    inWedge: inWedgeCW(a0, a1, aT),
+    left: +left.toFixed(6),
+    right:+right.toFixed(6),
+    labelSweep:+arc.sweep.toFixed(6),
+    wedgeSweep:+cwSweepDeg(a0, a1).toFixed(6),
+    pathId
+  });
+
+});
+
+      // Render moon
+      renderMoon(moonG, state.moonFrac);
+
+      // Render minimalist hour hand (points to current halachic slice center)
+      const now = state.now;
+      let handPeriod, handIdx;
+      if (isBetween(now, state.sunrise, state.sunset)){
+        handPeriod = "day";
+        handIdx = clamp(Math.floor((now - state.sunrise)/state.shaahDay), 0, 11);
+      }else{
+        handPeriod = "night";
+        // night starts at sunset (halachic day boundary)
+        handIdx = clamp(Math.floor((now - state.sunset)/state.shaahNight), 0, 11);
+        if (now < state.sunset) {
+          // after midnight but before sunrise (still part of night): compute from sunset on previous civil day
+          // We already built state.sunset for current civil date, so if now < sunset we should still be
+          // in "night" that began at yesterday's sunset. For simplicity, we instead use state.prevSunset.
+          handIdx = clamp(Math.floor((now - state.prevSunset)/state.shaahNightPrev), 0, 11);
+        }
+      }
+
+      const isHandPrevNight = (handPeriod === "night" && now < state.sunrise);
+	  const handNightBase = isHandPrevNight ? (dayStart - nightArc) : nightStart;
+
+	  const aCenter = (handPeriod==="day")
+	  ? (dayStart + (handIdx+0.5)*stepDay)
+	  : (handNightBase + (handIdx+0.5)*stepNight);
+
+
+
+      const outer = (handPeriod==="day") ? rDayOuter : rNightOuter;
+      const rHand = outer - 18;
+
+      const end = polar(cx,cy,rHand,aCenter);
+
+      // subtle shadow under hand
+      const shadow = document.createElementNS("http://www.w3.org/2000/svg","line");
+      shadow.setAttribute("x1", cx); shadow.setAttribute("y1", cy);
+      shadow.setAttribute("x2", end.x); shadow.setAttribute("y2", end.y);
+      shadow.setAttribute("class","handShadow");
+      handG.appendChild(shadow);
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1", cx); line.setAttribute("y1", cy);
+      line.setAttribute("x2", end.x); line.setAttribute("y2", end.y);
+      line.setAttribute("class","hand");
+      handG.appendChild(line);
+
+      const cap = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      cap.setAttribute("cx",cx); cap.setAttribute("cy",cy); cap.setAttribute("r","5.2");
+      cap.setAttribute("class","handCap");
+      handG.appendChild(cap);
+
+      // tiny info ring
+      const ring = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      ring.setAttribute("cx",cx); ring.setAttribute("cy",cy); ring.setAttribute("r", rInner+6);
+      ring.setAttribute("fill","none");
+      ring.setAttribute("stroke","rgba(255,255,255,.10)");
+      handG.appendChild(ring);
+    }
+
+    // ---------- Build zmanim ----------
+    function buildState(lat, lon, dateLocal, tzeitMinutes){
+      // dateLocal is a Date (local time) representing selected calendar day (we’ll treat as local day)
+      const d0 = new Date(dateLocal.getFullYear(), dateLocal.getMonth(), dateLocal.getDate(), 12, 0, 0); // midday local, stable
+      const sunrise = solarEventLocal(d0, lat, lon, true);
+      const sunset  = solarEventLocal(d0, lat, lon, false);
+	  
+	  // Hard validation: sunrise must be before sunset for normal latitudes.
+// If not, something went wrong with date parsing or solar calc inputs.
+const sunriseMs = sunrise instanceof Date ? sunrise.getTime() : NaN;
+const sunsetMs  = sunset  instanceof Date ? sunset.getTime()  : NaN;
+
+if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= sunsetMs) {
+  console.warn("[SOLAR INVALID] sunrise/sunset bad", {
+    dateLocal: d0.toString(),
+    sunrise: sunrise?.toString?.(),
+    sunset: sunset?.toString?.(),
+    lat, lon
+  });
+  // Bail with NaNs so UI shows "—" rather than corrupt wedges/labels.
+  return {
+    lat, lon,
+    dateLocal: d0,
+    sunrise: new Date(NaN),
+    sunset: new Date(NaN),
+    nextSunrise: new Date(NaN),
+    prevSunset: new Date(NaN),
+    dayLength: NaN,
+    nightLength: NaN,
+    shaahDay: NaN,
+    shaahNight: NaN,
+    shaahNightPrev: NaN,
+    tzeitMinutes,
+    now: new Date(),
+    labels: [],
+    civilDate: dateLocal,
+    moonFrac: moonPhaseFraction(dateLocal),
+    zmanimList: []
+  };
+}
+
+      // next sunrise (tomorrow)
+      const d1 = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()+1, 12, 0, 0);
+      const nextSunrise = solarEventLocal(d1, lat, lon, true);
+
+      // previous sunset (yesterday) for "now < today's sunset" night-hour calculation
+      const dPrev = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()-1, 12, 0, 0);
+      const prevSunset = solarEventLocal(dPrev, lat, lon, false);
+      const prevNextSunrise = sunrise; // "next sunrise" for that previous night is today's sunrise
+      const nightLengthPrev = prevNextSunrise - prevSunset;
+
+      const dayLength = sunset - sunrise;
+      const nightLength = nextSunrise - sunset;
+
+      const shaahDay = dayLength / 12;
+      const shaahNight = nightLength / 12;
+      const shaahNightPrev = nightLengthPrev / 12;
+
+      // A small set of readable zmanim:
+      const alot = addMinutes(sunrise, -72); // simple/common baseline
+      const netz = sunrise;
+      const shema = new Date(sunrise.getTime() + 3*shaahDay);
+      const tfila = new Date(sunrise.getTime() + 4*shaahDay);
+      const chatzot = new Date(sunrise.getTime() + 6*shaahDay);
+      const minchaGedola = new Date(sunrise.getTime() + 6.5*shaahDay);
+      const minchaKetana = new Date(sunrise.getTime() + 9.5*shaahDay);
+      const plag = new Date(sunrise.getTime() + 10.75*shaahDay);
+      const shkia = sunset;
+      const tzeit = addMinutes(sunset, tzeitMinutes);
+      const chatzotLayla = new Date(sunset.getTime() + 6*shaahNight);
+
+      const now = new Date();
+
+      // Labels kept short; they will be drawn as curved text in the correct slice.
+      const labels = [
+        { name:"Alot", short:"Alot", time: alot },
+        { name:"Netz", short:"Netz", time: netz },
+        { name:"Sof Zman Shema", short:"Shema", time: shema },
+        { name:"Chatzot", short:"Chatzot", time: chatzot },
+        { name:"Plag", short:"Plag", time: plag },
+        { name:"Shkiah", short:"Shkiah", time: shkia },
+        { name:"Tzeit", short:"Tzeit", time: tzeit },
+        { name:"Chatzot Layla", short:"Chatzot·L", time: chatzotLayla },
+      ];
+
+      return {
+        lat, lon,
+        dateLocal: new Date(dateLocal.getFullYear(), dateLocal.getMonth(), dateLocal.getDate(), 12, 0, 0),
+        sunrise, sunset, nextSunrise,
+        prevSunset,
+        dayLength, nightLength,
+        shaahDay, shaahNight, shaahNightPrev,
+        tzeitMinutes,
+        now,
+        labels,
+        // moon phase computed for "now" (or could be for halachic date; UI wants current)
+        civilDate: dateLocal,                 // <-- add this so renderList can use it
+		moonFrac: moonPhaseFraction(dateLocal),
+
+        // full list for below-the-clock
+        zmanimList: [
+          ["Alot (72m)", alot],
+          ["Netz (Sunrise)", netz],
+          ["Sof Zman Shema (3 shaot)", shema],
+          ["Sof Zman Tfila (4 shaot)", tfila],
+          ["Chatzot (midday)", chatzot],
+          ["Mincha Gedola (6.5)", minchaGedola],
+          ["Mincha Ketana (9.5)", minchaKetana],
+          ["Plag (10.75)", plag],
+          ["Shkiah (Sunset)", shkia],
+          [`Tzeit (+${tzeitMinutes}m)`, tzeit],
+          ["Chatzot Layla", chatzotLayla],
+        ]
+      };
+    }
+
+    function renderList(state){
+      const zlist = $("zlist");
+      zlist.innerHTML = "";
+      state.zmanimList.forEach(([k,v])=>{
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `<div class="k">${k}</div><div class="v">${fmtTime(v)}</div>`;
+        zlist.appendChild(row);
+      });
+
+      const d = state.civilDate || new Date(); // fallback if needed
+	  const { hebrewDate, hebrewDow } = getHebrewDateStrings(d);
+	  $("hebrewDate").textContent = hebrewDate;
+	  $("hebrewDow").textContent = hebrewDow;
+    }
+
+    // ---------- Main ----------
+    function refresh(){
+	const lat = parseFloat($("lat").value);
+	const lon = parseFloat($("lon").value);
+	const tzeitMinutes = parseInt($("tzeit").value, 10);
+	__refreshN++;
+console.log("[REFRESH]", __refreshN, {
+  dateValue: $("date").value,
+  anchorMode: document.querySelector('input[name="anchorMode"]:checked')?.value,
+  lat: $("lat").value,
+  lon: $("lon").value
+});
+
+	let dateStr = $("date").value;
+
+// If the date picker is mid-interaction, some browsers can briefly report "".
+// Use the last known good date string to avoid NaN solar.
+if (!dateStr && __lastGoodDateStr) dateStr = __lastGoodDateStr;
+
+	let dateLocal;
+if (dateStr) {
+  // Parse YYYY-MM-DD as a LOCAL civil date deterministically (no ISO Date parsing).
+  const [Y, M, D] = dateStr.split("-").map(n => parseInt(n, 10));
+  dateLocal = new Date(Y, M - 1, D, 12, 0, 0, 0); // local noon
+} else {
+  dateLocal = new Date();
+}
+	// read slider FIRST
+	const anchorMode = parseInt(document.querySelector('input[name="anchorMode"]:checked').value, 10);
+	console.log("[DATE PARSED]", { dateStr, dateLocal: dateLocal.toString() });
+
+	// build state, then attach anchorMode onto it
+	let state = buildState(lat, lon, dateLocal, tzeitMinutes);
+state.anchorMode = anchorMode;
+
+// If solar calc failed (buildState returned NaN sunrise/sunset), keep last good state
+// so the clock doesn't blank out (no labels) during interval refreshes.
+const badSolar =
+  !state.sunrise || isNaN(state.sunrise.getTime()) ||
+  !state.sunset  || isNaN(state.sunset.getTime());
+
+if (badSolar) {
+  // Only reuse last-good state if we're still on the SAME date.
+  // If the user picked a NEW date and solar failed, show "—" so the failure is visible.
+  const sameDate = !!dateStr && dateStr === __lastGoodDateStr;
+
+  console.warn("[REFRESH] bad solar", __refreshN, { dateStr, sameDate });
+
+  if (sameDate && __lastGoodState) {
+    state = __lastGoodState;
+  }
+} else {
+  __lastGoodState = state;
+  if (dateStr) __lastGoodDateStr = dateStr;
+}
+
+	// update the UI label text (PUTS YOUR SNIPPET IN THE RIGHT PLACE)
+	$("anchorLabel").textContent =
+    (anchorMode === 0)
+      ? "Top = Netz (Sunrise)"
+      : "Top = Chatzot Hayom (Midday)";
+
+	// Status line
+	const dayMin = state.dayLength/60000;
+	const nightMin = state.nightLength/60000;
+	const shaDayMin = state.shaahDay/60000;
+	const shaNightMin = state.shaahNight/60000;
+
+	$("status").textContent =
+    `Sunrise ${fmtTime(state.sunrise)} · Sunset ${fmtTime(state.sunset)} · Next Sunrise ${fmtTime(state.nextSunrise)} | ` +
+    `Day ${dayMin.toFixed(1)}m (shaah ${shaDayMin.toFixed(1)}m) · Night ${nightMin.toFixed(1)}m (shaah ${shaNightMin.toFixed(1)}m).`;
+
+	renderList(state);
+	renderClock(state);
+	}
+
+
+    // init date input to today
+    function setToday(){
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = pad2(now.getMonth()+1);
+      const d = pad2(now.getDate());
+      $("date").value = `${y}-${m}-${d}`;
+    }
+
+    $("btnRefresh").addEventListener("click", refresh);
+	document.querySelectorAll('input[name="anchorMode"]').forEach(r => r.addEventListener("change", refresh));
+    $("btnNow").addEventListener("click", ()=>{ setToday(); refresh(); });
+	$("date").addEventListener("change", refresh);
+	$("date").addEventListener("input", refresh); // optional, but nice
+
+
+    $("btnGeo").addEventListener("click", ()=>{
+      if(!navigator.geolocation){
+        alert("Geolocation not available in this browser.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition((pos)=>{
+        $("lat").value = pos.coords.latitude.toFixed(4);
+        $("lon").value = pos.coords.longitude.toFixed(4);
+        refresh();
+      }, (err)=>{
+        alert("Could not get location: " + err.message);
+      }, { enableHighAccuracy:true, timeout:8000 });
+    });
+
+    // Re-render every minute (no background promises; just a simple interval while open)
+    setToday();
+    refresh();
+    setInterval(()=>{
+  const v = $("date").value;
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+  if (!v || v === todayStr) refresh();
+}, 60*1000);
+  </script>
+</body>
+</html>
