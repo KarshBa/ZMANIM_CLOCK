@@ -387,6 +387,10 @@ body.drawerOpen .drawer{ transform: translateX(0); }
   .clockCard{ padding: 10px; }
   svg{ width: calc(100vw - 20px); max-width: 520px; } /* fills phone w/ margin */
 }
+/* breathing room between the zmanim rows and the Controls box */
+details.controls{
+  margin-top: 10px; /* try 10–16px */
+}
   </style>
 </head>
 <body>
@@ -782,63 +786,217 @@ function setHandEndpoint(x2, y2){
 }
 
     // ---------- Moon phase ----------
-    function moonPhaseFraction(date){
-      // Epoch: 2000-01-06 18:14 UTC (known new moon)
-      const epoch = Date.UTC(2000,0,6,18,14,0);
-      const synodic = 29.530588853 * 86400000; // ms
-      const now = date.getTime();
-      const frac = ((now - epoch) % synodic + synodic) % synodic / synodic; // [0,1)
-      return frac;
+   function moonPhaseFraction(date){
+  // More stable approximation using Julian Day.
+  // Returns phase fraction in [0,1): 0=new, 0.25=first quarter, 0.5=full, 0.75=last quarter.
+
+  // Convert Unix ms -> Julian Day (UTC)
+  const jd = (date.getTime() / 86400000) + 2440587.5;
+
+  // Reference new moon near 2000-01-06 18:14 UTC ≈ JD 2451550.1
+  const jdNew = 2451550.1;
+
+  const synodicDays = 29.530588853;
+  let f = (jd - jdNew) / synodicDays;
+  f = f - Math.floor(f); // fractional part in [0,1)
+  if (f < 0) f += 1;
+  return f;
+}
+
+// ---------- Moon phase (16 phases, date-based) ----------
+
+function moonPhaseIndex16(phaseFrac){
+  const f = ((phaseFrac % 1) + 1) % 1; // [0,1)
+  return (Math.round(f * 16) % 16);    // nearest of 16 bins
+}
+
+function kFromIdx16(idx){
+  // 0..8 rises 0→1, then 9..15 falls 0.875→0.125
+  const t = (idx <= 8) ? idx : (16 - idx);
+  return t / 8; // 0..1..0
+}
+
+// Create lit region boundary = limb circle + terminator ellipse (sphere-correct).
+// ---------- Moon drawing: matches the 16 SVG set logic ----------
+
+function litCrescentPath(cx, cy, r, rx, side){
+  // side: "right" => waxing crescent/quarter, "left" => waning crescent/quarter
+  // Returns LIT region path to draw on top of a dark disc
+  // Uses circle limb + centered ellipse terminator.
+  // NOTE: For the crescent case, the ellipse arc goes back up opposite direction.
+  const topX = cx, topY = cy - r;
+  const botX = cx, botY = cy + r;
+
+  if (side === "right"){
+    // right-side lit crescent
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 1 ${botX} ${botY}
+            A ${rx} ${r} 0 0 0 ${topX} ${topY}
+            Z`;
+  } else {
+    // left-side lit crescent
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 0 ${botX} ${botY}
+            A ${rx} ${r} 0 0 1 ${topX} ${topY}
+            Z`;
+  }
+}
+
+function shadowCrescentPath(cx, cy, r, rx, side){
+  // side: "left" => waxing gibbous shadow (dark bite on left)
+  //       "right" => waning gibbous shadow (dark bite on right)
+  // Returns SHADOW region path to draw on top of a full light disc
+  const topX = cx, topY = cy - r;
+  const botX = cx, botY = cy + r;
+
+  if (side === "left"){
+    // left-side dark bite
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 0 ${botX} ${botY}
+            A ${rx} ${r} 0 0 1 ${topX} ${topY}
+            Z`;
+  } else {
+    // right-side dark bite
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 1 ${botX} ${botY}
+            A ${rx} ${r} 0 0 0 ${topX} ${topY}
+            Z`;
+  }
+}
+
+// ---------- Moon phase ----------
+function moonPhaseFraction(date){
+  const jd = (date.getTime() / 86400000) + 2440587.5;
+  const jdNew = 2451550.1;
+  const synodicDays = 29.530588853;
+  let f = (jd - jdNew) / synodicDays;
+  f = f - Math.floor(f);
+  if (f < 0) f += 1;
+  return f;
+}
+
+// ---------- Moon phase (16 phases) ----------
+function moonPhaseIndex16(phaseFrac){
+  const f = ((phaseFrac % 1) + 1) % 1;
+  return (Math.round(f * 16) % 16);
+}
+
+function kFromIdx16(idx){
+  const t = (idx <= 8) ? idx : (16 - idx);
+  return t / 8; // 0..1..0
+}
+
+// ---------- Moon drawing helpers ----------
+function litCrescentPath(cx, cy, r, rx, side){
+  const topX = cx, topY = cy - r;
+  const botX = cx, botY = cy + r;
+
+  if (side === "right"){
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 1 ${botX} ${botY}
+            A ${rx} ${r} 0 0 0 ${topX} ${topY}
+            Z`;
+  } else {
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 0 ${botX} ${botY}
+            A ${rx} ${r} 0 0 1 ${topX} ${topY}
+            Z`;
+  }
+}
+
+function shadowCrescentPath(cx, cy, r, rx, side){
+  const topX = cx, topY = cy - r;
+  const botX = cx, botY = cy + r;
+
+  if (side === "left"){
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 0 ${botX} ${botY}
+            A ${rx} ${r} 0 0 1 ${topX} ${topY}
+            Z`;
+  } else {
+    return `M ${topX} ${topY}
+            A ${r} ${r} 0 0 1 ${botX} ${botY}
+            A ${rx} ${r} 0 0 0 ${topX} ${topY}
+            Z`;
+  }
+}
+
+// ---------- Moon renderer (ONLY ONE) ----------
+function renderMoon(g, phaseFrac){
+  const cx = 210, cy = 278, r = 26;
+  g.innerHTML = "";
+
+  const f = ((phaseFrac % 1) + 1) % 1;
+  const waxing = (f < 0.5);
+
+  const idx = moonPhaseIndex16(f);
+  const k = kFromIdx16(idx);
+
+  const NS = "http://www.w3.org/2000/svg";
+  const DARK = getComputedStyle(document.documentElement).getPropertyValue("--night").trim() || "#1a2233";
+  const LIGHT = "rgba(248,251,255,.92)";
+
+  const addCircle = (fill) => {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", cx);
+    c.setAttribute("cy", cy);
+    c.setAttribute("r", r);
+    c.setAttribute("fill", fill);
+    c.setAttribute("stroke", "rgba(255,255,255,.12)");
+    g.appendChild(c);
+    return c;
+  };
+
+  const addPath = (d, fill) => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    p.setAttribute("fill", fill);
+    g.appendChild(p);
+    return p;
+  };
+
+  // New
+  if (k <= 0.001){
+    addCircle(DARK);
+  }
+  // Full
+  else if (k >= 0.999){
+    addCircle(LIGHT);
+  }
+  // Crescents + quarters: dark base + light shape
+  else if (k <= 0.5 + 1e-9){
+    addCircle(DARK);
+
+    if (Math.abs(k - 0.5) < 1e-9){
+      const dQuarter = waxing
+        ? `M ${cx} ${cy - r} A ${r} ${r} 0 0 1 ${cx} ${cy + r} L ${cx} ${cy - r} Z`
+        : `M ${cx} ${cy - r} A ${r} ${r} 0 0 0 ${cx} ${cy + r} L ${cx} ${cy - r} Z`;
+      addPath(dQuarter, LIGHT);
+    } else {
+      const rx = Math.max(0.0001, r * Math.abs(2*k - 1));
+      addPath(litCrescentPath(cx, cy, r, rx, waxing ? "right" : "left"), LIGHT);
     }
+  }
+  // Gibbous: light base + dark shadow bite (use kShadow = 1-k)
+  else {
+    addCircle(LIGHT);
 
-    // Draw flat moon: bright disc + clipped shadow disc offset
-    function renderMoon(g, phaseFrac){
-	const cx = 210, cy = 278, r = 26;
-	g.innerHTML = "";
+    const kShadow = 1 - k;
+    const rx = Math.max(0.0001, r * Math.abs(2*kShadow - 1));
+    addPath(shadowCrescentPath(cx, cy, r, rx, waxing ? "left" : "right"), DARK);
+  }
 
-	// bright disc
-	const base = document.createElementNS("http://www.w3.org/2000/svg","circle");
-	base.setAttribute("cx", cx);
-	base.setAttribute("cy", cy);
-	base.setAttribute("r", r);
-	base.setAttribute("fill", "rgba(248,251,255,.92)");
-	base.setAttribute("stroke", "rgba(255,255,255,.20)");
-	g.appendChild(base);
+  // Outer ring
+  const ring = document.createElementNS(NS, "circle");
+  ring.setAttribute("cx", cx);
+  ring.setAttribute("cy", cy);
+  ring.setAttribute("r", r + 7);
+  ring.setAttribute("fill", "none");
+  ring.setAttribute("stroke", "rgba(255,255,255,.10)");
+  g.appendChild(ring);
 
-	// dark "shadow" disc that we shift left/right to reveal illumination
-	const shadow = document.createElementNS("http://www.w3.org/2000/svg","circle");
-	shadow.setAttribute("cx", cx);
-	shadow.setAttribute("cy", cy);
-	shadow.setAttribute("r", r);
-	shadow.setAttribute("clip-path","url(#moonClip)");
-	shadow.setAttribute("fill", "rgba(26,34,51,.92)");
-	g.appendChild(shadow);
-
-	// phaseFrac: 0=new, 0.5=full
-	const waxing = phaseFrac < 0.5;
-
-	// Geometry that behaves correctly at key phases:
-	// new: dx = 0 (fully dark)
-	// quarter: |dx| ≈ r (half lit)
-	// full: |dx| ≈ 2r (shadow moved off disc -> fully lit)
-	const phaseAngle = 2 * Math.PI * phaseFrac;
-	const mag = (1 - Math.cos(phaseAngle)) * r;
-
-	// Northern hemisphere convention: waxing => light grows on the RIGHT
-	// To make the RIGHT side brighter, shift the dark disc LEFT (negative dx).
-	const dx = (waxing ? -1 : 1) * mag;
-
-	shadow.setAttribute("transform", `translate(${dx.toFixed(2)},0)`);
-
-      // Small outline ring for calm geometry
-      const ring = document.createElementNS("http://www.w3.org/2000/svg","circle");
-      ring.setAttribute("cx", cx);
-      ring.setAttribute("cy", cy);
-      ring.setAttribute("r", r+7);
-      ring.setAttribute("fill","none");
-      ring.setAttribute("stroke","rgba(255,255,255,.10)");
-      g.appendChild(ring);
-    }
+  // console.log("[MOON16]", { date: $("date").value, f:+f.toFixed(6), idx, k:+k.toFixed(3), waxing });
+}
 
     // ---------- Zmanim & Slice Placement ----------
     function addMinutes(d, mins){ return new Date(d.getTime() + mins*60000); }
