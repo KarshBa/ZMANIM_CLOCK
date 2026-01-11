@@ -566,6 +566,7 @@ details.controls{
 	let __refreshN = 0;
 	let __lastGoodDateStr = "";
 	let __lastGoodState = null;
+	let __lastHebrewKey = "";
 	
 	// ---------- Persistent hand + animation globals ----------
 let __handRAF = 0;
@@ -577,6 +578,25 @@ function stopHandAnimation(){
     cancelAnimationFrame(__handRAF);
     __handRAF = 0;
   }
+}
+
+function updateHebrewDateLive(state){
+  if (!isSelectedDateToday()) return;
+  if (!(state.tzeit instanceof Date) || !Number.isFinite(state.tzeit.getTime())) return;
+
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  const civilForHebrew = (now >= state.tzeit)
+    ? new Date(y, m, d + 1, 12, 0, 0, 0)
+    : new Date(y, m, d, 12, 0, 0, 0);
+
+  const key = `${civilForHebrew.getFullYear()}-${civilForHebrew.getMonth()}-${civilForHebrew.getDate()}`;
+  if (key === __lastHebrewKey) return;
+  __lastHebrewKey = key;
+
+  const { hebrewDate, hebrewDow } = getHebrewDateStrings(civilForHebrew);
+  $("hebrewDate").innerHTML = hebrewDate;
+  $("hebrewDow").innerHTML = hebrewDow;
 }
 
 function ensureHandElements(){
@@ -638,16 +658,29 @@ function setHandEndpoint(x2, y2){
       return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     }
 
-    // For Hebrew date (built-in Intl Hebrew calendar).
-    function getHebrewDateStrings(date){
-      // Hebrew calendar formatting is supported in modern browsers.
-      const heDateFmt = new Intl.DateTimeFormat('he-u-ca-hebrew', { day:'numeric', month:'long', year:'numeric' });
-      const heDowFmt  = new Intl.DateTimeFormat('he', { weekday:'long' });
-      return {
-        hebrewDate: heDateFmt.format(date),
-        hebrewDow: heDowFmt.format(date)
-      };
-    }
+  // For Hebrew date (built-in Intl Hebrew calendar).
+  function getHebrewDateStrings(date){
+  const parts = new Intl.DateTimeFormat('he-u-ca-hebrew', {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  }).formatToParts(date);
+
+  const year  = parts.find(p => p.type === "year")?.value ?? "—";
+  const month = parts.find(p => p.type === "month")?.value ?? "—";
+  const day   = parts.find(p => p.type === "day")?.value ?? "—";
+
+  const hebrewDow = new Intl.DateTimeFormat('he', { weekday:'long' }).format(date);
+
+  // IMPORTANT:
+  // Logical RTL order = Day · Month · Year
+  // Visual result     = Year · Month · Day
+  return {
+    hebrewDate: `<span dir="rtl">${day} · ${month} · ${year}</span>`,
+    hebrewDow:  `<span dir="rtl">${hebrewDow}</span>`
+  };
+}
+
 
     // Degrees to radians
     const d2r = (deg)=>deg*Math.PI/180;
@@ -1849,6 +1882,7 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
         // moon phase computed for "now" (or could be for halachic date; UI wants current)
         civilDate: dateLocal,                 // <-- add this so renderList can use it
 		moonFrac: moonPhaseFraction(dateLocal),
+		tzeit,
 
         // full list for below-the-clock
         zmanimList: [
@@ -1867,27 +1901,42 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
       };
     }
 
-    function renderList(state){
-      const zlist = $("zlist");
-      zlist.innerHTML = "";
-      state.zmanimList.forEach(([k,v])=>{
-        const row = document.createElement("div");
-        row.className = "row";
-        row.innerHTML = `<div class="k">${k}</div><div class="v">${fmtTime(v)}</div>`;
-        zlist.appendChild(row);
-      });
+  function renderList(state){
+  const zlist = $("zlist");
+  zlist.innerHTML = "";
+  state.zmanimList.forEach(([k,v])=>{
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<div class="k">${k}</div><div class="v">${fmtTime(v)}</div>`;
+    zlist.appendChild(row);
+  });
 
-      const d = state.civilDate || new Date(); // fallback if needed
-	  const { hebrewDate, hebrewDow } = getHebrewDateStrings(d);
-	  $("hebrewDate").textContent = hebrewDate;
-	  $("hebrewDow").textContent = hebrewDow;
+  // Hebrew date: rolls over at tzeit when viewing "today"
+  function hebrewDisplayCivilDate(state){
+    // If viewing "today", roll over at tzeit using TODAY’s civil date
+    if (isSelectedDateToday() && state.tzeit instanceof Date && Number.isFinite(state.tzeit.getTime())){
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+      const offset = (now >= state.tzeit) ? 1 : 0;
+      return new Date(y, m, d + offset, 12, 0, 0, 0);
     }
+
+    // Otherwise (historical date selection), just show that selected civil date
+    return state.civilDate || new Date();
+  }
+
+  const d = hebrewDisplayCivilDate(state);
+  const { hebrewDate, hebrewDow } = getHebrewDateStrings(d);
+  $("hebrewDate").innerHTML = hebrewDate;
+  $("hebrewDow").innerHTML = hebrewDow;
+}
+
 	
 	function startHandAnimation(state){
   __handState = state;
 
   stopHandAnimation(); // hard-cancel any previous RAF loop
-
+  updateHebrewDateLive(__handState);
   // Non-today: freeze at civil noon (consistent + stated behavior)
   if (!isSelectedDateToday()){
     __handShouldAnimate = false;
@@ -1910,9 +1959,11 @@ if (!Number.isFinite(sunriseMs) || !Number.isFinite(sunsetMs) || sunriseMs >= su
     }
 
     const now = new Date();
-    updateHandOnly(__handState, now);
+	updateHandOnly(__handState, now);
+	updateHebrewDateLive(__handState);
 
-    const s = __handState;
+	const s = __handState;
+
 
     // 1) Civil date rollover: keep widget “forever” live when user is on "today"
     // If date picker no longer matches today's YYYY-MM-DD, advance it and refresh once.
